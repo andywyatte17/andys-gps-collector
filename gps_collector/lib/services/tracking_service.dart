@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:geolocator/geolocator.dart';
+import 'package:geolocator_android/geolocator_android.dart';
 import 'database_service.dart';
 
 enum TrackingState { idle, recording, paused }
@@ -96,9 +97,17 @@ class TrackingService {
   }
 
   void _startListening() {
-    const locationSettings = LocationSettings(
+    // intervalDuration tells Android to only poll GPS every 10s,
+    // saving battery by keeping the hardware idle between polls.
+    final locationSettings = AndroidSettings(
       accuracy: LocationAccuracy.high,
-      distanceFilter: 5, // metres between updates
+      distanceFilter: 5,
+      intervalDuration: const Duration(seconds: 10),
+      foregroundNotificationConfig: const ForegroundNotificationConfig(
+        notificationTitle: 'GPS Collector',
+        notificationText: 'Recording GPS track',
+        enableWakeLock: true,
+      ),
     );
 
     _positionSubscription = Geolocator.getPositionStream(

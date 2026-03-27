@@ -54,6 +54,11 @@ showing on a map. This will initially be Android only app.
         - The table should show a distance covered indicator, by drawing and
           summing a straight line between all gps coordinates.
         - The table should approximate speed in minutes per km.
+    - Each track_events should be able to be renamed in this part of the app -
+      we can use a Rename button and edit box here.
+    - Have a delete button to delete track_events for each event. If clicked then
+      show a 'do you really want to delete' type confirmation before actually
+      deleting.
 
 ## Gps Collecting Data Format
 
@@ -64,3 +69,7 @@ showing on a map. This will initially be Android only app.
         - Millisecond time point for this event - in milliseconds since t-start - event-type = {all}
         - gps coordinate (lat/long as per normal conventions) - event-type = Point
         - Accuracy of gps coordinate in meters - event-type = Point
+- Each gps track_events collection should have a name (string) field allowing
+  renaming.
+- To save battery life, don't poll the gps event more than, say, once in every 10s
+  please.

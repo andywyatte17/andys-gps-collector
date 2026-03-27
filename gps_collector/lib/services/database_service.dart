@@ -98,6 +98,27 @@ class DatabaseService {
     });
   }
 
+  /// Delete a track and all its events.
+  Future<void> deleteTrack({required int trackId}) async {
+    final db = await database;
+    await db.delete('track_events', where: 'track_id = ?', whereArgs: [trackId]);
+    await db.delete('tracks', where: 'id = ?', whereArgs: [trackId]);
+  }
+
+  /// Rename a track.
+  Future<void> renameTrack({
+    required int trackId,
+    required String name,
+  }) async {
+    final db = await database;
+    await db.update(
+      'tracks',
+      {'name': name},
+      where: 'id = ?',
+      whereArgs: [trackId],
+    );
+  }
+
   /// Mark a track as finished.
   Future<void> finalizeTrack({
     required int trackId,

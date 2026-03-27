@@ -1,3 +1,9 @@
+# README
+
+A simple Flutter (Android) app for doing some GPS recording. This is partly
+a practical app I need, and partly an experiment in using Claude to write me
+a useful app.
+
 # Flutter Dev Setup Guide (Mac, No Admin)
 
 ## 1. Install Flutter SDK
@@ -109,3 +115,16 @@ flutter run
 
 This should build and launch a demo app on your connected phone. Delete the
 `test_app` folder afterwards.
+
+# Flutter Dev (General)
+
+## To Run
+
+Ensure an emulator is running or device attached (USB).
+
+```bash
+cd gps_collector
+flutter pub get
+# or flutter pub update
+flutter run
+```

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import '../services/database_service.dart';
+import '../services/geo_utils.dart';
 import '../services/gpx_service.dart';
 
 class TracksScreen extends StatefulWidget {
@@ -16,6 +17,9 @@ class _TracksScreenState extends State<TracksScreen> {
   final DatabaseService _db = DatabaseService();
   final GpxService _gpx = GpxService();
   List<Map<String, dynamic>> _tracks = [];
+  // distance in metres and duration in ms, keyed by track id
+  final Map<int, double> _distances = {};
+  final Map<int, int> _durations = {};
   bool _loading = true;
 
   @override
@@ -29,6 +33,20 @@ class _TracksScreenState extends State<TracksScreen> {
   Future<void> _loadTracks() async {
     try {
       final tracks = await _db.getAllTracks();
+
+      // Compute distance and duration for each track
+      for (final track in tracks) {
+        final trackId = track['id'] as int;
+        final points = await _db.getTrackPoints(trackId: trackId);
+        _distances[trackId] = totalDistanceMetres(points);
+
+        final startedAt = DateTime.tryParse(track['started_at'] as String);
+        final endedAt = DateTime.tryParse(track['ended_at'] as String? ?? '');
+        if (startedAt != null && endedAt != null) {
+          _durations[trackId] = endedAt.difference(startedAt).inMilliseconds;
+        }
+      }
+
       setState(() {
         _tracks = tracks;
         _loading = false;
@@ -88,6 +106,68 @@ class _TracksScreenState extends State<TracksScreen> {
     }
   }
 
+  Future<void> _deleteTrack(int trackId, String name) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Track'),
+        content: Text('Are you sure you want to delete "$name"?\n\n'
+            'This will permanently remove the track and all its GPS data.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await _db.deleteTrack(trackId: trackId);
+      await _loadTracks();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('"$name" deleted.')),
+        );
+      }
+    }
+  }
+
+  Future<void> _renameTrack(int trackId, String currentName) async {
+    final controller = TextEditingController(text: currentName);
+    final newName = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Rename Track'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'Track name'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+
+    if (newName != null && newName.isNotEmpty && newName != currentName) {
+      await _db.renameTrack(trackId: trackId, name: newName);
+      await _loadTracks();
+    }
+  }
+
   String _formatDateTime(String? isoString) {
     if (isoString == null) {
       return '-';
@@ -137,6 +217,14 @@ class _TracksScreenState extends State<TracksScreen> {
                       track['ended_at'] as String?,
                     );
                     final pointCount = track['point_count'] as int;
+                    final distance = _distances[trackId] ?? 0;
+                    final durationMs = _durations[trackId];
+                    final pace = durationMs != null
+                        ? formatPace(
+                            distanceMetres: distance,
+                            durationMs: durationMs,
+                          )
+                        : null;
 
                     return Card(
                       child: Padding(
@@ -155,19 +243,35 @@ class _TracksScreenState extends State<TracksScreen> {
                             Text('Started: $startedAt'),
                             Text('Ended: $endedAt'),
                             Text('GPS points: $pointCount'),
+                            Text('Distance: ${formatDistance(distance)}'),
+                            if (pace != null) Text('Pace: $pace'),
                             const SizedBox(height: 8),
-                            Row(
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
                               children: [
+                                ElevatedButton.icon(
+                                  onPressed: () => _renameTrack(trackId, name),
+                                  icon: const Icon(Icons.edit, size: 18),
+                                  label: const Text('Rename'),
+                                ),
                                 ElevatedButton.icon(
                                   onPressed: () => _copyGpx(trackId),
                                   icon: const Icon(Icons.copy, size: 18),
                                   label: const Text('Copy GPX'),
                                 ),
-                                const SizedBox(width: 8),
                                 ElevatedButton.icon(
                                   onPressed: () => _saveGpx(trackId, name),
                                   icon: const Icon(Icons.save, size: 18),
                                   label: const Text('Save GPX'),
+                                ),
+                                ElevatedButton.icon(
+                                  onPressed: () => _deleteTrack(trackId, name),
+                                  icon: const Icon(Icons.delete, size: 18),
+                                  label: const Text('Delete'),
+                                  style: ElevatedButton.styleFrom(
+                                    foregroundColor: Colors.red,
+                                  ),
                                 ),
                               ],
                             ),
