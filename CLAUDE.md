@@ -33,4 +33,20 @@ showing on a map. This will initially be Android only app.
   relevant tables created if missing.
     - There will be a debug function - db - that shows the status of the
       db via a button press.
-
+- App needs to have GPS permissions from app. Add button to check this and
+  give a message to say how the GPS permissions must be set up in the app,
+  if they are wrong.
+- App gps tracking
+    - Button area of main screen - Record; Pause (active if Record is
+      active); Stop - which stops the session and saves all the gps data
+      collected into a sqlite table.
+    - Record here should also grab the time Record started, and store this
+      in the sqlite table.
+    - Show button - show all previously recorded gps tracks as a little
+      scrollable table with the data, and number of gps coordinates
+      collected in each.
+        - The table here show have a 'Copy' button against each entry.
+          Clicking Copy show grab the gps data as a gpx trace xml file
+          that can be paste elsewhere. NB: Would it be possible to also
+          have a Save function, to save to a special place like Downloads
+          or Documents?

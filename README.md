@@ -36,6 +36,25 @@ Open Android Studio and go through the setup wizard. It will install:
 
 The SDK installs to `~/Library/Android/sdk` by default (no admin needed).
 
+### Required Android SDK/NDK Versions
+
+After the setup wizard, open **Android Studio > Settings > Languages &
+Frameworks > Android SDK** and ensure the following are installed:
+
+- **SDK Manager > SDK Platforms tab**: Install the latest Android API level
+  (the project uses `flutter.compileSdkVersion` which tracks Flutter's default)
+- **SDK Manager > SDK Tools tab**:
+  - Android SDK Build-Tools (latest)
+  - Android SDK Command-line Tools (latest)
+  - **NDK (Side by side)**: version **27.0.12077973** (required by sqflite and
+    path_provider plugins)
+
+To install the NDK from the command line instead:
+
+```bash
+sdkmanager "ndk;27.0.12077973"
+```
+
 Add to `~/.zshrc`:
 
 ```bash
