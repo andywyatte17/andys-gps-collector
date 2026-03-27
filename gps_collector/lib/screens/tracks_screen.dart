@@ -5,6 +5,7 @@ import 'package:path_provider/path_provider.dart';
 import '../services/database_service.dart';
 import '../services/geo_utils.dart';
 import '../services/gpx_service.dart';
+import 'map_screen.dart';
 
 class TracksScreen extends StatefulWidget {
   const TracksScreen({super.key});
@@ -264,6 +265,21 @@ class _TracksScreenState extends State<TracksScreen> {
                                   onPressed: () => _saveGpx(trackId, name),
                                   icon: const Icon(Icons.save, size: 18),
                                   label: const Text('Save GPX'),
+                                ),
+                                ElevatedButton.icon(
+                                  onPressed: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => MapScreen(
+                                          trackId: trackId,
+                                          trackName: name,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                  icon: const Icon(Icons.map, size: 18),
+                                  label: const Text('Map'),
                                 ),
                                 ElevatedButton.icon(
                                   onPressed: () => _deleteTrack(trackId, name),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/database_service.dart';
+import '../services/tile_cache_service.dart';
 
 class DebugScreen extends StatefulWidget {
   const DebugScreen({super.key});
@@ -10,6 +11,7 @@ class DebugScreen extends StatefulWidget {
 
 class _DebugScreenState extends State<DebugScreen> {
   Map<String, dynamic>? _dbInfo;
+  Map<String, dynamic>? _cacheInfo;
   bool _loading = false;
   String? _error;
 
@@ -21,8 +23,10 @@ class _DebugScreenState extends State<DebugScreen> {
 
     try {
       final info = await DatabaseService().getDebugInfo();
+      final cacheInfo = await TileCacheService().getCacheDebugInfo();
       setState(() {
         _dbInfo = info;
+        _cacheInfo = cacheInfo;
         _loading = false;
       });
     } catch (e) {
@@ -39,7 +43,7 @@ class _DebugScreenState extends State<DebugScreen> {
       appBar: AppBar(
         title: const Text('Debug - Database'),
       ),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -103,21 +107,58 @@ class _DebugScreenState extends State<DebugScreen> {
                         'Total GPS points',
                         '${_dbInfo!['track_point_count']}',
                       ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+            if (_cacheInfo != null) ...[
+              const SizedBox(height: 8),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Tile Cache (SQLite)',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const Divider(),
+                      _infoRow(
+                        'Cached tiles',
+                        '${_cacheInfo!['tile_count']}',
+                      ),
+                      _infoRow(
+                        'Cache size',
+                        '${_cacheInfo!['cache_size_mb']} MB',
+                      ),
                       const Divider(),
                       const Text(
-                        'Tile Cache',
+                        'Session Stats',
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                       _infoRow(
-                        'Cached tiles',
-                        '${_dbInfo!['tile_cache_count']}',
+                        'Network requests',
+                        '${_cacheInfo!['session_network_requests']}',
                       ),
                       _infoRow(
-                        'Cache size',
-                        '${_dbInfo!['tile_cache_size_mb']} MB',
+                        'Network loaded',
+                        '${_cacheInfo!['session_network_loaded_mb']} MB',
+                      ),
+                      _infoRow(
+                        'Cache hits',
+                        '${_cacheInfo!['session_cache_hits']}',
+                      ),
+                      _infoRow(
+                        'Cache served',
+                        '${_cacheInfo!['session_cache_served_mb']} MB',
                       ),
                     ],
                   ),

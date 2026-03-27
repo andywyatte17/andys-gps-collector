@@ -83,6 +83,14 @@ class DatabaseService {
     await db.execute('''
       CREATE INDEX idx_tile_cache_fetched ON tile_cache(fetched_at)
     ''');
+
+    // Settings table - key/value store for app preferences
+    await db.execute('''
+      CREATE TABLE settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      )
+    ''');
   }
 
   /// Create a new track and return its ID.
@@ -230,6 +238,33 @@ class DatabaseService {
       where: "track_id = ? AND event_type = 'point'",
       whereArgs: [trackId],
       orderBy: 'ms_since_start ASC',
+    );
+  }
+
+  /// Get a setting value, or null if not set.
+  Future<String?> getSetting({required String key}) async {
+    final db = await database;
+    final results = await db.query(
+      'settings',
+      where: 'key = ?',
+      whereArgs: [key],
+      limit: 1,
+    );
+    if (results.isEmpty) {
+      return null;
+    }
+    return results.first['value'] as String;
+  }
+
+  /// Set a setting value (insert or update).
+  Future<void> setSetting({
+    required String key,
+    required String value,
+  }) async {
+    final db = await database;
+    await db.rawInsert(
+      'INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)',
+      [key, value],
     );
   }
 
