@@ -16,6 +16,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final PermissionService _permissionService = PermissionService();
   final TrackingService _trackingService = TrackingService();
   GpsPermissionResult? _permissionResult;
+  BatteryOptimizationResult? _batteryResult;
 
   @override
   void initState() {
@@ -33,8 +34,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _checkPermission() async {
     final result = await _permissionService.checkGpsPermission();
+    final battery = await _permissionService.checkBatteryOptimization();
     setState(() {
       _permissionResult = result;
+      _batteryResult = battery;
     });
   }
 
@@ -42,6 +45,21 @@ class _HomeScreenState extends State<HomeScreen> {
     final result = await _permissionService.requestGpsPermission();
     setState(() {
       _permissionResult = result;
+    });
+  }
+
+  Future<void> _requestBackground() async {
+    final result = await _permissionService.requestBackgroundPermission();
+    setState(() {
+      _permissionResult = result;
+    });
+  }
+
+  Future<void> _requestBatteryExemption() async {
+    final result =
+        await _permissionService.requestBatteryOptimizationExemption();
+    setState(() {
+      _batteryResult = result;
     });
   }
 
@@ -58,6 +76,8 @@ class _HomeScreenState extends State<HomeScreen> {
         return Colors.green;
       case GpsPermissionStatus.denied:
         return Colors.orange;
+      case GpsPermissionStatus.backgroundNeeded:
+        return Colors.orange;
       case GpsPermissionStatus.permanentlyDenied:
         return Colors.red;
       case GpsPermissionStatus.serviceDisabled:
@@ -73,6 +93,8 @@ class _HomeScreenState extends State<HomeScreen> {
       case GpsPermissionStatus.granted:
         return Icons.gps_fixed;
       case GpsPermissionStatus.denied:
+        return Icons.gps_not_fixed;
+      case GpsPermissionStatus.backgroundNeeded:
         return Icons.gps_not_fixed;
       case GpsPermissionStatus.permanentlyDenied:
         return Icons.gps_off;
@@ -144,7 +166,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -197,6 +219,13 @@ class _HomeScreenState extends State<HomeScreen> {
                           label: const Text('Request Permission'),
                         ),
                       if (_permissionResult!.status ==
+                          GpsPermissionStatus.backgroundNeeded)
+                        ElevatedButton.icon(
+                          onPressed: _requestBackground,
+                          icon: const Icon(Icons.lock_open),
+                          label: const Text('Request Background'),
+                        ),
+                      if (_permissionResult!.status ==
                           GpsPermissionStatus.permanentlyDenied)
                         ElevatedButton.icon(
                           onPressed: _openSettings,
@@ -215,6 +244,68 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ),
+
+            // Battery Optimization Section
+            if (_batteryResult != null) ...[
+              const SizedBox(height: 8),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            _batteryResult!.isExempt
+                                ? Icons.battery_full
+                                : Icons.battery_alert,
+                            color: _batteryResult!.isExempt
+                                ? Colors.green
+                                : Colors.orange,
+                            size: 28,
+                          ),
+                          const SizedBox(width: 8),
+                          const Text(
+                            'Battery Optimization',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: (_batteryResult!.isExempt
+                                  ? Colors.green
+                                  : Colors.orange)
+                              .withAlpha(25),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: (_batteryResult!.isExempt
+                                    ? Colors.green
+                                    : Colors.orange)
+                                .withAlpha(76),
+                          ),
+                        ),
+                        child: Text(_batteryResult!.message),
+                      ),
+                      if (!_batteryResult!.isExempt) ...[
+                        const SizedBox(height: 8),
+                        ElevatedButton.icon(
+                          onPressed: _requestBatteryExemption,
+                          icon: const Icon(Icons.battery_saver),
+                          label: const Text('Disable Battery Optimization'),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 16),
 
             // GPS Tracking Section

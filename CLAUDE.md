@@ -97,3 +97,15 @@ showing on a map. This will initially be Android only app.
     - Style 3 - as per Style 1 but bright orange.
     - The options are saved into persistent storage so that it will have
       the last chosen option on returning to this page or after restart.
+
+### Challenges
+
+- The app, when collecting gps data, must continue collecting data from
+  the lock screen or in background. Other resources have told me to
+  look at these areas.
+    - Use flutter_background_geolocation.
+    - Add and request ACCESS_BACKGROUND_LOCATION and FOREGROUND_SERVICE
+      permissions.
+    - Run location tracking as a foreground service with a persistent
+      notification.
+    - Ask users to disable battery optimizations in the app.

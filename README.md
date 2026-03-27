@@ -127,4 +127,6 @@ cd gps_collector
 flutter pub get
 # or flutter pub update
 flutter run
+# or
+flutter run --release
 ```
