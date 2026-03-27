@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../services/permission_service.dart';
+import '../services/tracking_service.dart';
 import 'debug_screen.dart';
+import 'tracks_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -12,7 +14,22 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final PermissionService _permissionService = PermissionService();
+  final TrackingService _trackingService = TrackingService();
   GpsPermissionResult? _permissionResult;
+
+  @override
+  void initState() {
+    super.initState();
+    _trackingService.onPositionUpdate = (_) {
+      setState(() {});
+    };
+  }
+
+  @override
+  void dispose() {
+    _trackingService.dispose();
+    super.dispose();
+  }
 
   Future<void> _checkPermission() async {
     final result = await _permissionService.checkGpsPermission();
@@ -64,8 +81,53 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<void> _onRecord() async {
+    // Check permission first
+    final permResult = await _permissionService.checkGpsPermission();
+    if (permResult.status != GpsPermissionStatus.granted) {
+      setState(() {
+        _permissionResult = permResult;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('GPS permission required. Check status above.'),
+          ),
+        );
+      }
+      return;
+    }
+
+    if (_trackingService.state == TrackingState.paused) {
+      await _trackingService.resume();
+    } else {
+      await _trackingService.startRecording();
+    }
+    setState(() {});
+  }
+
+  Future<void> _onPause() async {
+    await _trackingService.pause();
+    setState(() {});
+  }
+
+  Future<void> _onStop() async {
+    await _trackingService.stop();
+    setState(() {});
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Track saved.')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final trackingState = _trackingService.state;
+    final isRecording = trackingState == TrackingState.recording;
+    final isPaused = trackingState == TrackingState.paused;
+    final isActive = isRecording || isPaused;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('GPS Collector'),
@@ -152,6 +214,100 @@ class _HomeScreenState extends State<HomeScreen> {
                   ],
                 ),
               ),
+            ),
+            const SizedBox(height: 16),
+
+            // GPS Tracking Section
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          isRecording
+                              ? Icons.fiber_manual_record
+                              : isPaused
+                                  ? Icons.pause_circle
+                                  : Icons.radio_button_unchecked,
+                          color: isRecording
+                              ? Colors.red
+                              : isPaused
+                                  ? Colors.orange
+                                  : Colors.grey,
+                          size: 28,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          isRecording
+                              ? 'Recording...'
+                              : isPaused
+                                  ? 'Paused'
+                                  : 'GPS Tracking',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (isActive) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'Points collected: ${_trackingService.pointCount}',
+                        style: const TextStyle(fontSize: 16),
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        // Record / Resume button
+                        ElevatedButton.icon(
+                          onPressed: isRecording ? null : _onRecord,
+                          icon: const Icon(Icons.fiber_manual_record),
+                          label: Text(isPaused ? 'Resume' : 'Record'),
+                          style: ElevatedButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            backgroundColor:
+                                isRecording ? Colors.grey : Colors.red,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        // Pause button (only active when recording)
+                        ElevatedButton.icon(
+                          onPressed: isRecording ? _onPause : null,
+                          icon: const Icon(Icons.pause),
+                          label: const Text('Pause'),
+                        ),
+                        const SizedBox(width: 8),
+                        // Stop button (active when recording or paused)
+                        ElevatedButton.icon(
+                          onPressed: isActive ? _onStop : null,
+                          icon: const Icon(Icons.stop),
+                          label: const Text('Stop'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Show Tracks button
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const TracksScreen(),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.list),
+              label: const Text('Show Recorded Tracks'),
             ),
           ],
         ),

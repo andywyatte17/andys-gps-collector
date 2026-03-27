@@ -40,17 +40,16 @@ class DatabaseService {
       )
     ''');
 
-    // Track points - GPS fixes linked to a track
+    // Track events - GPS points and pause/unpause markers
     await db.execute('''
-      CREATE TABLE track_points (
+      CREATE TABLE track_events (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         track_id INTEGER NOT NULL,
-        latitude REAL NOT NULL,
-        longitude REAL NOT NULL,
-        altitude REAL,
-        accuracy REAL,
-        speed REAL,
-        timestamp TEXT NOT NULL,
+        event_type TEXT NOT NULL,
+        ms_since_start INTEGER NOT NULL,
+        latitude REAL,
+        longitude REAL,
+        accuracy_meters REAL,
         FOREIGN KEY (track_id) REFERENCES tracks(id) ON DELETE CASCADE
       )
     ''');
@@ -86,6 +85,133 @@ class DatabaseService {
     ''');
   }
 
+  /// Create a new track and return its ID.
+  Future<int> createTrack({
+    required String name,
+    required String startedAt,
+  }) async {
+    final db = await database;
+    return await db.insert('tracks', {
+      'name': name,
+      'started_at': startedAt,
+      'is_active': 1,
+    });
+  }
+
+  /// Mark a track as finished.
+  Future<void> finalizeTrack({
+    required int trackId,
+    required String endedAt,
+  }) async {
+    final db = await database;
+    await db.update(
+      'tracks',
+      {'ended_at': endedAt, 'is_active': 0},
+      where: 'id = ?',
+      whereArgs: [trackId],
+    );
+  }
+
+  /// Insert a GPS point event for a track.
+  Future<void> insertTrackPoint({
+    required int trackId,
+    required int msSinceStart,
+    required double latitude,
+    required double longitude,
+    required double accuracyMeters,
+  }) async {
+    final db = await database;
+    await db.insert('track_events', {
+      'track_id': trackId,
+      'event_type': 'point',
+      'ms_since_start': msSinceStart,
+      'latitude': latitude,
+      'longitude': longitude,
+      'accuracy_meters': accuracyMeters,
+    });
+  }
+
+  /// Insert a pause event for a track.
+  Future<void> insertPauseEvent({
+    required int trackId,
+    required int msSinceStart,
+  }) async {
+    final db = await database;
+    await db.insert('track_events', {
+      'track_id': trackId,
+      'event_type': 'pause',
+      'ms_since_start': msSinceStart,
+    });
+  }
+
+  /// Insert an unpause event for a track.
+  Future<void> insertUnpauseEvent({
+    required int trackId,
+    required int msSinceStart,
+  }) async {
+    final db = await database;
+    await db.insert('track_events', {
+      'track_id': trackId,
+      'event_type': 'unpause',
+      'ms_since_start': msSinceStart,
+    });
+  }
+
+  /// Get a single track by ID.
+  Future<Map<String, dynamic>?> getTrack({required int trackId}) async {
+    final db = await database;
+    final results = await db.query(
+      'tracks',
+      where: 'id = ?',
+      whereArgs: [trackId],
+      limit: 1,
+    );
+    if (results.isEmpty) {
+      return null;
+    }
+    return results.first;
+  }
+
+  /// Get all completed tracks, newest first.
+  Future<List<Map<String, dynamic>>> getAllTracks() async {
+    final db = await database;
+    return await db.rawQuery('''
+      SELECT t.*,
+        COUNT(CASE WHEN te.event_type = 'point' THEN 1 END) as point_count
+      FROM tracks t
+      LEFT JOIN track_events te ON te.track_id = t.id
+      WHERE t.is_active = 0
+      GROUP BY t.id
+      ORDER BY t.started_at DESC
+    ''');
+  }
+
+  /// Get all events for a track, in time order.
+  Future<List<Map<String, dynamic>>> getTrackEvents({
+    required int trackId,
+  }) async {
+    final db = await database;
+    return await db.query(
+      'track_events',
+      where: 'track_id = ?',
+      whereArgs: [trackId],
+      orderBy: 'ms_since_start ASC',
+    );
+  }
+
+  /// Get only GPS point events for a track, in time order.
+  Future<List<Map<String, dynamic>>> getTrackPoints({
+    required int trackId,
+  }) async {
+    final db = await database;
+    return await db.query(
+      'track_events',
+      where: "track_id = ? AND event_type = 'point'",
+      whereArgs: [trackId],
+      orderBy: 'ms_since_start ASC',
+    );
+  }
+
   /// Returns a map of debug info about the database state.
   Future<Map<String, dynamic>> getDebugInfo() async {
     final db = await database;
@@ -99,7 +225,7 @@ class DatabaseService {
     ) ?? 0;
 
     final trackPointCount = Sqflite.firstIntValue(
-      await db.rawQuery('SELECT COUNT(*) FROM track_points'),
+      await db.rawQuery("SELECT COUNT(*) FROM track_events WHERE event_type = 'point'"),
     ) ?? 0;
 
     final tileCacheCount = Sqflite.firstIntValue(

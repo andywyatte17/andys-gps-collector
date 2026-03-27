@@ -37,12 +37,13 @@ showing on a map. This will initially be Android only app.
   give a message to say how the GPS permissions must be set up in the app,
   if they are wrong.
 - App gps tracking
-    - Button area of main screen - Record; Pause (active if Record is
+    - Button area of main screen - Record; Pause/Unpause (active if Record is
       active); Stop - which stops the session and saves all the gps data
       collected into a sqlite table.
     - Record here should also grab the time Record started, and store this
       in the sqlite table.
-    - Show button - show all previously recorded gps tracks as a little
+- App gps tracking > Show button
+    - Show all previously recorded gps tracks as a little
       scrollable table with the data, and number of gps coordinates
       collected in each.
         - The table here show have a 'Copy' button against each entry.
@@ -50,3 +51,16 @@ showing on a map. This will initially be Android only app.
           that can be paste elsewhere. NB: Would it be possible to also
           have a Save function, to save to a special place like Downloads
           or Documents?
+        - The table should show a distance covered indicator, by drawing and
+          summing a straight line between all gps coordinates.
+        - The table should approximate speed in minutes per km.
+
+## Gps Collecting Data Format
+
+- Collect gps trace points as
+    - Time point for start of Recording = t-start
+    - List of...
+        - event type - Pause; Point; Unpause
+        - Millisecond time point for this event - in milliseconds since t-start - event-type = {all}
+        - gps coordinate (lat/long as per normal conventions) - event-type = Point
+        - Accuracy of gps coordinate in meters - event-type = Point
