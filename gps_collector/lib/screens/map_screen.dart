@@ -31,8 +31,8 @@ class _MapScreenState extends State<MapScreen> {
   int _lineStyle = 0; // 0 = blue, 1 = green
   int _accuracyFilter = 0; // index into _accuracyFilters
 
-  static const double _minZoom = 13;
-  static const double _maxZoom = 17;
+  static const double _minZoom = 11;
+  static const double _maxZoom = 19;
 
   static const _lineStyles = [
     (label: 'Blue', color: Colors.blue),
@@ -145,15 +145,17 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   void _zoomIn() {
-    if (_zoom < _maxZoom) {
-      setState(() { _zoom++; });
+    final nextZoom = (_zoom.floor() + 1).toDouble().clamp(_minZoom, _maxZoom);
+    if (nextZoom != _zoom) {
+      setState(() { _zoom = nextZoom; });
       _mapController.move(_mapController.camera.center, _zoom);
     }
   }
 
   void _zoomOut() {
-    if (_zoom > _minZoom) {
-      setState(() { _zoom--; });
+    final nextZoom = (_zoom.ceil() - 1).toDouble().clamp(_minZoom, _maxZoom);
+    if (nextZoom != _zoom) {
+      setState(() { _zoom = nextZoom; });
       _mapController.move(_mapController.camera.center, _zoom);
     }
   }
@@ -181,9 +183,19 @@ class _MapScreenState extends State<MapScreen> {
                       options: MapOptions(
                         initialCenter: _center!,
                         initialZoom: _zoom,
+                        minZoom: _minZoom,
+                        maxZoom: _maxZoom,
                         interactionOptions: const InteractionOptions(
-                          flags: InteractiveFlag.none,
+                          flags: InteractiveFlag.pinchZoom
+                              | InteractiveFlag.pinchMove,
                         ),
+                        onPositionChanged: (camera, hasGesture) {
+                          if (hasGesture) {
+                            setState(() {
+                              _zoom = camera.zoom;
+                            });
+                          }
+                        },
                       ),
                       children: [
                         TileLayer(
@@ -256,12 +268,22 @@ class _MapScreenState extends State<MapScreen> {
                         ],
                       ),
                     ),
-                    // Zoom controls
+                    // Zoom & pan controls
                     Positioned(
                       right: 16,
                       bottom: 16,
                       child: Column(
                         children: [
+                          FloatingActionButton.small(
+                            heroTag: 'pan_reset',
+                            onPressed: () {
+                              if (_center != null) {
+                                _mapController.move(_center!, _zoom);
+                              }
+                            },
+                            child: const Icon(Icons.center_focus_strong),
+                          ),
+                          const SizedBox(height: 8),
                           FloatingActionButton.small(
                             heroTag: 'zoom_in',
                             onPressed: _zoom < _maxZoom ? _zoomIn : null,
@@ -278,7 +300,7 @@ class _MapScreenState extends State<MapScreen> {
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
-                              '${_zoom.toInt()}',
+                              '${_zoom.round()}',
                               style: const TextStyle(
                                 fontWeight: FontWeight.bold,
                               ),

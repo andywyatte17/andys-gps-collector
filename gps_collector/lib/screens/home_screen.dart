@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../services/permission_service.dart';
 import '../services/tracking_service.dart';
@@ -17,6 +18,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final TrackingService _trackingService = TrackingService();
   GpsPermissionResult? _permissionResult;
   BatteryOptimizationResult? _batteryResult;
+  bool _showDebugPanel = false;
 
   @override
   void initState() {
@@ -141,6 +143,78 @@ class _HomeScreenState extends State<HomeScreen> {
         const SnackBar(content: Text('Track saved.')),
       );
     }
+  }
+
+  String _inferSource(Position pos) {
+    if (pos.isMocked) { return 'Mock'; }
+    if (pos.accuracy > 100 && pos.altitudeAccuracy == 0) { return 'Network?'; }
+    if (pos.accuracy < 20 && pos.altitudeAccuracy > 0) { return 'GPS'; }
+    if (pos.accuracy >= 20) { return 'Fused?'; }
+    return 'GPS?';
+  }
+
+  Widget _buildDebugPanel() {
+    final pos = _trackingService.lastPosition;
+    if (pos == null) {
+      return Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.grey.withAlpha(25),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.grey.withAlpha(76)),
+        ),
+        child: const Text(
+          'No GPS data yet. Start recording to see live data.',
+          style: TextStyle(color: Colors.grey),
+        ),
+      );
+    }
+
+    final source = _inferSource(pos);
+    final sourceColor = source == 'GPS'
+        ? Colors.green
+        : source.startsWith('Network')
+            ? Colors.red
+            : source == 'Mock'
+                ? Colors.purple
+                : Colors.orange;
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.blueGrey.withAlpha(20),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.blueGrey.withAlpha(76)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text('Source: ',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+              Text(source,
+                  style: TextStyle(
+                      fontWeight: FontWeight.bold, color: sourceColor)),
+              const Spacer(),
+              Text('Acc: ${pos.accuracy.toStringAsFixed(1)}m',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: pos.accuracy > 20 ? Colors.red : Colors.green,
+                  )),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text('Lat: ${pos.latitude.toStringAsFixed(6)}  '
+              'Lon: ${pos.longitude.toStringAsFixed(6)}'),
+          Text('Speed: ${pos.speed.toStringAsFixed(1)} m/s  '
+              'Alt: ${pos.altitude.toStringAsFixed(0)}m'),
+          Text('Spd Acc: ${pos.speedAccuracy.toStringAsFixed(1)}  '
+              'Alt Acc: ${pos.altitudeAccuracy.toStringAsFixed(1)}  '
+              'Hdg Acc: ${pos.headingAccuracy.toStringAsFixed(1)}'),
+        ],
+      ),
+    );
   }
 
   @override
@@ -346,10 +420,33 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     if (isActive) ...[
                       const SizedBox(height: 8),
-                      Text(
-                        'Points collected: ${_trackingService.pointCount}',
-                        style: const TextStyle(fontSize: 16),
+                      Row(
+                        children: [
+                          Text(
+                            'Points collected: ${_trackingService.pointCount}',
+                            style: const TextStyle(fontSize: 16),
+                          ),
+                          const Spacer(),
+                          IconButton(
+                            icon: Icon(
+                              Icons.bug_report,
+                              color: _showDebugPanel
+                                  ? Colors.blue
+                                  : Colors.grey,
+                            ),
+                            tooltip: 'Toggle GPS debug info',
+                            onPressed: () {
+                              setState(() {
+                                _showDebugPanel = !_showDebugPanel;
+                              });
+                            },
+                          ),
+                        ],
                       ),
+                    ],
+                    if (_showDebugPanel && isActive) ...[
+                      const SizedBox(height: 4),
+                      _buildDebugPanel(),
                     ],
                     const SizedBox(height: 12),
                     Row(

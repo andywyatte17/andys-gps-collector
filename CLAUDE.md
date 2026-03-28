@@ -45,6 +45,11 @@ Built with Flutter and SQLite.
     - Pause/Unpause button (active if Record is active)
     - Stop - which stops the session and saves all the gps data
       collected into a sqlite table.
+    - A (bug icon) toggle button switches on/off a visible
+      area below that shows last gps collected track_events
+      info from Record (or blank otherwise). This is useful
+      for debugging purposes, particularly to see the quality
+      of data, inferred source and accuracy.
 
 ### Background Tracking
 
@@ -98,9 +103,15 @@ Built with Flutter and SQLite.
 - Shows a view of the openstreetmap tiles that are just sufficient for all of
   the areas in the gpx trace.
 - To start, use a zoom level - 15. The user can click a button to change
-  this zoom level within a range (13..17 to start with).
+  this zoom level within a range (11..19 to start with).
 - We will draw on top of the map tiles the gpx route we took.
-- Map view - not zoomable yet (except the zoom level changeable).
+- Map view - should have panning and zooming (now - v2).
+  Zooming (pinch) and panning (two-finger drag).
+  Pinch just moved up and down through the levels with the
+  level stored as a double and rounded to the nearest int
+  level for openstreetmap tiles usage.
+- There should be a *Pan Reset* button that re-centers
+  the panning position with the map points at the center.
 
 ### Track Line Style
 

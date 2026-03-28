@@ -74,6 +74,29 @@ class _TrackEventsScreenState extends State<TrackEventsScreen> {
     return '${(count * 100 / total).round()}%';
   }
 
+  /// Infer the likely location provider from available data.
+  String _inferSource(Map<String, dynamic> event) {
+    final acc = event['accuracy_meters'] as double?;
+    final altitudeAcc = event['altitude_accuracy'] as double?;
+    final isMocked = event['is_mocked'] as int?;
+
+    if (isMocked == 1) { return 'Mock'; }
+
+    // Network fixes typically have very poor accuracy and no altitude accuracy
+    if (acc != null && acc > 100 && (altitudeAcc == null || altitudeAcc == 0)) {
+      return 'Network?';
+    }
+    // Good accuracy with altitude data strongly suggests GPS satellite fix
+    if (acc != null && acc < 20 && altitudeAcc != null && altitudeAcc > 0) {
+      return 'GPS';
+    }
+    // Moderate accuracy - likely fused provider
+    if (acc != null && acc >= 20) {
+      return 'Fused?';
+    }
+    return 'GPS?';
+  }
+
   Future<void> _removeByAccuracy({
     required double threshold,
     required String label,
@@ -157,14 +180,20 @@ class _TrackEventsScreenState extends State<TrackEventsScreen> {
                             scrollDirection: Axis.horizontal,
                             child: SingleChildScrollView(
                               child: DataTable(
-                                columnSpacing: 16,
+                                columnSpacing: 12,
                                 columns: const [
                                   DataColumn(label: Text('#')),
                                   DataColumn(label: Text('Type')),
                                   DataColumn(label: Text('Time')),
-                                  DataColumn(label: Text('Latitude')),
-                                  DataColumn(label: Text('Longitude')),
-                                  DataColumn(label: Text('Accuracy (m)')),
+                                  DataColumn(label: Text('Lat')),
+                                  DataColumn(label: Text('Lon')),
+                                  DataColumn(label: Text('Acc (m)')),
+                                  DataColumn(label: Text('Source')),
+                                  DataColumn(label: Text('Speed')),
+                                  DataColumn(label: Text('Alt')),
+                                  DataColumn(label: Text('Spd Acc')),
+                                  DataColumn(label: Text('Alt Acc')),
+                                  DataColumn(label: Text('Hdg Acc')),
                                 ],
                                 rows: List.generate(_events.length, (i) {
                                   final e = _events[i];
@@ -173,11 +202,17 @@ class _TrackEventsScreenState extends State<TrackEventsScreen> {
                                   final lat = e['latitude'] as double?;
                                   final lon = e['longitude'] as double?;
                                   final acc = e['accuracy_meters'] as double?;
+                                  final speed = e['speed'] as double?;
+                                  final altitude = e['altitude'] as double?;
+                                  final speedAcc = e['speed_accuracy'] as double?;
+                                  final altAcc = e['altitude_accuracy'] as double?;
+                                  final hdgAcc = e['heading_accuracy'] as double?;
 
                                   final isPoint = eventType == 'point';
                                   final accText = acc != null
                                       ? acc.toStringAsFixed(1)
                                       : '-';
+                                  final source = isPoint ? _inferSource(e) : '-';
 
                                   // Highlight poor accuracy in red
                                   final accStyle = acc != null && acc > 20
@@ -186,6 +221,19 @@ class _TrackEventsScreenState extends State<TrackEventsScreen> {
                                           fontWeight: FontWeight.bold,
                                         )
                                       : null;
+
+                                  // Colour-code inferred source
+                                  final sourceStyle = TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                    color: source == 'GPS'
+                                        ? Colors.green
+                                        : source.startsWith('Network')
+                                            ? Colors.red
+                                            : source == 'Mock'
+                                                ? Colors.purple
+                                                : Colors.orange,
+                                  );
 
                                   return DataRow(
                                     color: !isPoint
@@ -210,6 +258,22 @@ class _TrackEventsScreenState extends State<TrackEventsScreen> {
                                       DataCell(Text(
                                         accText,
                                         style: accStyle,
+                                      )),
+                                      DataCell(Text(source, style: sourceStyle)),
+                                      DataCell(Text(
+                                        speed != null ? speed.toStringAsFixed(1) : '-',
+                                      )),
+                                      DataCell(Text(
+                                        altitude != null ? altitude.toStringAsFixed(0) : '-',
+                                      )),
+                                      DataCell(Text(
+                                        speedAcc != null ? speedAcc.toStringAsFixed(1) : '-',
+                                      )),
+                                      DataCell(Text(
+                                        altAcc != null ? altAcc.toStringAsFixed(1) : '-',
+                                      )),
+                                      DataCell(Text(
+                                        hdgAcc != null ? hdgAcc.toStringAsFixed(1) : '-',
                                       )),
                                     ],
                                   );

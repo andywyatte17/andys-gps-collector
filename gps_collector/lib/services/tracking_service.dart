@@ -18,6 +18,9 @@ class TrackingService {
   int _pointCount = 0;
   int get pointCount => _pointCount;
 
+  Position? _lastPosition;
+  Position? get lastPosition => _lastPosition;
+
   DateTime? _startTime;
 
   StreamSubscription<Position>? _positionSubscription;
@@ -95,6 +98,7 @@ class TrackingService {
     _activeTrackId = null;
     _startTime = null;
     _pointCount = 0;
+    _lastPosition = null;
   }
 
   void _startListening() {
@@ -137,9 +141,16 @@ class TrackingService {
       longitude: position.longitude,
       msSinceStart: msSinceStart,
       accuracyMeters: position.accuracy,
+      speed: position.speed,
+      altitude: position.altitude,
+      speedAccuracy: position.speedAccuracy,
+      altitudeAccuracy: position.altitudeAccuracy,
+      headingAccuracy: position.headingAccuracy,
+      isMocked: position.isMocked,
     );
 
     _pointCount++;
+    _lastPosition = position;
     onPositionUpdate?.call(position);
   }
 

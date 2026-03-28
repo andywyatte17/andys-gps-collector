@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(flutter --version)",
-      "Bash(flutter analyze:*)"
+      "Bash(flutter analyze:*)",
+      "Read(//Users/andywyatt/.pub-cache/hosted/pub.dev/flutter_map-7.0.2/lib/**)",
+      "Bash(2)"
     ]
   }
 }

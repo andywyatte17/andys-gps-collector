@@ -22,8 +22,9 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: _onCreate,
+      onUpgrade: _onUpgrade,
     );
   }
 
@@ -50,6 +51,12 @@ class DatabaseService {
         latitude REAL,
         longitude REAL,
         accuracy_meters REAL,
+        speed REAL,
+        altitude REAL,
+        speed_accuracy REAL,
+        altitude_accuracy REAL,
+        heading_accuracy REAL,
+        is_mocked INTEGER,
         FOREIGN KEY (track_id) REFERENCES tracks(id) ON DELETE CASCADE
       )
     ''');
@@ -91,6 +98,17 @@ class DatabaseService {
         value TEXT NOT NULL
       )
     ''');
+  }
+
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await db.execute('ALTER TABLE track_events ADD COLUMN speed REAL');
+      await db.execute('ALTER TABLE track_events ADD COLUMN altitude REAL');
+      await db.execute('ALTER TABLE track_events ADD COLUMN speed_accuracy REAL');
+      await db.execute('ALTER TABLE track_events ADD COLUMN altitude_accuracy REAL');
+      await db.execute('ALTER TABLE track_events ADD COLUMN heading_accuracy REAL');
+      await db.execute('ALTER TABLE track_events ADD COLUMN is_mocked INTEGER');
+    }
   }
 
   /// Create a new track and return its ID.
@@ -161,6 +179,12 @@ class DatabaseService {
     required double latitude,
     required double longitude,
     required double accuracyMeters,
+    double? speed,
+    double? altitude,
+    double? speedAccuracy,
+    double? altitudeAccuracy,
+    double? headingAccuracy,
+    bool? isMocked,
   }) async {
     final db = await database;
     await db.insert('track_events', {
@@ -170,6 +194,12 @@ class DatabaseService {
       'latitude': latitude,
       'longitude': longitude,
       'accuracy_meters': accuracyMeters,
+      'speed': speed,
+      'altitude': altitude,
+      'speed_accuracy': speedAccuracy,
+      'altitude_accuracy': altitudeAccuracy,
+      'heading_accuracy': headingAccuracy,
+      'is_mocked': isMocked == true ? 1 : null,
     });
   }
 
