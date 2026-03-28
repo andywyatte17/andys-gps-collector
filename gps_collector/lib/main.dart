@@ -6,7 +6,9 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Initialize the database (creates tables if missing)
-  await DatabaseService().database;
+  final db = DatabaseService();
+  await db.database;
+  await db.vacuum();
 
   runApp(const GpsCollectorApp());
 }

@@ -31,6 +31,12 @@ Built with Flutter and SQLite.
 - To save battery life, don't poll the gps event more than, say, once in every 10s
   please.
 
+### Database size handling
+
+- Call sqlite db VACUUM at startup to reclaim space and prevent the
+  db growing too big.
+- Report sqlite db 'size on disk' stat in Home > Debug area.
+
 ---
 
 ## 2. GPS Tracking (Home Page)

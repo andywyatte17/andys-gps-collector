@@ -116,6 +116,22 @@ flutter run
 This should build and launch a demo app on your connected phone. Delete the
 `test_app` folder afterwards.
 
+## Android Version Compatibility
+
+The app uses Flutter's default Android SDK settings (via Flutter 3.29.2):
+
+- **Minimum SDK**: 21 (Android 5.0 Lollipop)
+- **Target SDK**: 35 (Android 15)
+- **Compile SDK**: 35
+
+The app should run on any Android device running **Android 5.0 (API 21) or higher**.
+However, some features have higher effective requirements:
+
+- **Background location** (`ACCESS_BACKGROUND_LOCATION`): requires API 29+ (Android 10).
+  On older devices, foreground location still works.
+- **Altitude/speed accuracy fields**: requires API 26+ (Android 8.0).
+  On older devices these fields report 0.
+
 # Flutter Dev (General)
 
 ## To Run

@@ -87,6 +87,10 @@ class _DebugScreenState extends State<DebugScreen> {
                       const Divider(),
                       _infoRow('Path', _dbInfo!['path']),
                       _infoRow(
+                        'Size on disk',
+                        '${_dbInfo!['db_size_mb']} MB',
+                      ),
+                      _infoRow(
                         'Tables',
                         (_dbInfo!['tables'] as List).join(', '),
                       ),

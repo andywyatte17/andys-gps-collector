@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 
@@ -109,6 +110,12 @@ class DatabaseService {
       await db.execute('ALTER TABLE track_events ADD COLUMN heading_accuracy REAL');
       await db.execute('ALTER TABLE track_events ADD COLUMN is_mocked INTEGER');
     }
+  }
+
+  /// Run VACUUM to reclaim space after deletions.
+  Future<void> vacuum() async {
+    final db = await database;
+    await db.execute('VACUUM');
   }
 
   /// Create a new track and return its ID.
@@ -341,8 +348,16 @@ class DatabaseService {
 
     final dbPath = db.path;
 
+    int dbSizeBytes = 0;
+    final dbFile = File(dbPath);
+    if (await dbFile.exists()) {
+      dbSizeBytes = await dbFile.length();
+    }
+
     return {
       'path': dbPath,
+      'db_size_bytes': dbSizeBytes,
+      'db_size_mb': (dbSizeBytes / (1024 * 1024)).toStringAsFixed(2),
       'tables': tables.map((t) => t['name'] as String).toList(),
       'track_count': trackCount,
       'active_track_count': activeTrackCount,
