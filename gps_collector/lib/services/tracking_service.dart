@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer' as developer;
 import 'package:geolocator/geolocator.dart';
 import 'package:geolocator_android/geolocator_android.dart';
 import 'database_service.dart';
@@ -116,6 +117,11 @@ class TrackingService {
   }
 
   Future<void> _onPosition(Position position) async {
+    developer.log(
+      'lat=${position.latitude}, lon=${position.longitude}, '
+      'accuracy=${position.accuracy}m',
+      name: 'tracking_service',
+    );
     if (_activeTrackId == null || _startTime == null) {
       return;
     }

@@ -22,12 +22,14 @@ class _MapScreenState extends State<MapScreen> {
   final DatabaseService _db = DatabaseService();
   final MapController _mapController = MapController();
 
+  List<Map<String, dynamic>> _rawPoints = [];
   List<LatLng> _trackPoints = [];
   LatLng? _center;
   double _zoom = 15;
   bool _loading = true;
   String? _error;
   int _lineStyle = 0; // 0 = blue, 1 = green
+  int _accuracyFilter = 0; // index into _accuracyFilters
 
   static const double _minZoom = 13;
   static const double _maxZoom = 17;
@@ -38,6 +40,13 @@ class _MapScreenState extends State<MapScreen> {
     (label: 'Orange', color: Colors.deepOrange),
   ];
 
+  static const _accuracyFilters = [
+    (label: 'All', maxMeters: 0.0),
+    (label: '20m', maxMeters: 20.0),
+    (label: '10m', maxMeters: 10.0),
+    (label: '5m', maxMeters: 5.0),
+  ];
+
   @override
   void initState() {
     super.initState();
@@ -46,13 +55,22 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Future<void> _loadSettings() async {
-    final saved = await _db.getSetting(key: 'map_line_style');
-    if (saved != null) {
-      final index = int.tryParse(saved);
-      if (index != null && index >= 0 && index < _lineStyles.length) {
-        setState(() { _lineStyle = index; });
+    final savedStyle = await _db.getSetting(key: 'map_line_style');
+    final savedFilter = await _db.getSetting(key: 'map_accuracy_filter');
+    setState(() {
+      if (savedStyle != null) {
+        final index = int.tryParse(savedStyle);
+        if (index != null && index >= 0 && index < _lineStyles.length) {
+          _lineStyle = index;
+        }
       }
-    }
+      if (savedFilter != null) {
+        final index = int.tryParse(savedFilter);
+        if (index != null && index >= 0 && index < _accuracyFilters.length) {
+          _accuracyFilter = index;
+        }
+      }
+    });
   }
 
   Future<void> _setLineStyle(int index) async {
@@ -60,16 +78,33 @@ class _MapScreenState extends State<MapScreen> {
     await _db.setSetting(key: 'map_line_style', value: index.toString());
   }
 
+  Future<void> _setAccuracyFilter(int index) async {
+    setState(() {
+      _accuracyFilter = index;
+      _trackPoints = _applyAccuracyFilter(_rawPoints);
+    });
+    await _db.setSetting(key: 'map_accuracy_filter', value: index.toString());
+  }
+
+  List<LatLng> _applyAccuracyFilter(List<Map<String, dynamic>> points) {
+    final maxMeters = _accuracyFilters[_accuracyFilter].maxMeters;
+    return points
+        .where((p) {
+          if (maxMeters <= 0) { return true; }
+          final accuracy = p['accuracy_meters'] as double?;
+          return accuracy != null && accuracy <= maxMeters;
+        })
+        .map((p) => LatLng(
+              p['latitude'] as double,
+              p['longitude'] as double,
+            ))
+        .toList();
+  }
+
   Future<void> _loadTrackPoints() async {
     try {
       final points = await _db.getTrackPoints(trackId: widget.trackId);
-
-      final latLngs = points
-          .map((p) => LatLng(
-                p['latitude'] as double,
-                p['longitude'] as double,
-              ))
-          .toList();
+      final latLngs = _applyAccuracyFilter(points);
 
       LatLng center;
       if (latLngs.isNotEmpty) {
@@ -96,6 +131,7 @@ class _MapScreenState extends State<MapScreen> {
       }
 
       setState(() {
+        _rawPoints = points;
         _trackPoints = latLngs;
         _center = center;
         _loading = false;
@@ -175,24 +211,49 @@ class _MapScreenState extends State<MapScreen> {
                           ),
                       ],
                     ),
-                    // Line style toggle
+                    // Line style & accuracy filter toggles
                     Positioned(
                       left: 16,
                       bottom: 16,
-                      child: FloatingActionButton.small(
-                        heroTag: 'line_style',
-                        backgroundColor: _lineStyles[_lineStyle].color,
-                        onPressed: () {
-                          _setLineStyle((_lineStyle + 1) % _lineStyles.length);
-                        },
-                        child: Text(
-                          _lineStyles[_lineStyle].label,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          FloatingActionButton.small(
+                            heroTag: 'accuracy_filter',
+                            backgroundColor: _accuracyFilter == 0
+                                ? Colors.grey
+                                : Colors.teal,
+                            onPressed: () {
+                              _setAccuracyFilter(
+                                (_accuracyFilter + 1) % _accuracyFilters.length,
+                              );
+                            },
+                            child: Text(
+                              _accuracyFilters[_accuracyFilter].label,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ),
-                        ),
+                          const SizedBox(height: 8),
+                          FloatingActionButton.small(
+                            heroTag: 'line_style',
+                            backgroundColor: _lineStyles[_lineStyle].color,
+                            onPressed: () {
+                              _setLineStyle((_lineStyle + 1) % _lineStyles.length);
+                            },
+                            child: Text(
+                              _lineStyles[_lineStyle].label,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     // Zoom controls

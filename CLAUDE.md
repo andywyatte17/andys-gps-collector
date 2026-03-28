@@ -97,6 +97,9 @@ showing on a map. This will initially be Android only app.
     - Style 3 - as per Style 1 but bright orange.
     - The options are saved into persistent storage so that it will have
       the last chosen option on returning to this page or after restart.
+- There will be a filter button that toggles through options - all, 20m, 5m etc.
+    - When selected then only GPS track_event values with accuracy less than 20m,
+      say, will be used.
 
 ### Challenges
 
