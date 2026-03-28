@@ -113,6 +113,19 @@ class DatabaseService {
     await db.delete('tracks', where: 'id = ?', whereArgs: [trackId]);
   }
 
+  /// Delete point events from a track where accuracy exceeds a threshold.
+  Future<int> deletePointsByAccuracy({
+    required int trackId,
+    required double maxAccuracyMeters,
+  }) async {
+    final db = await database;
+    return await db.delete(
+      'track_events',
+      where: "track_id = ? AND event_type = 'point' AND accuracy_meters >= ?",
+      whereArgs: [trackId, maxAccuracyMeters],
+    );
+  }
+
   /// Rename a track.
   Future<void> renameTrack({
     required int trackId,

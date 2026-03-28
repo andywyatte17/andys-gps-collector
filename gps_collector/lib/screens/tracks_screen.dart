@@ -6,6 +6,7 @@ import '../services/database_service.dart';
 import '../services/geo_utils.dart';
 import '../services/gpx_service.dart';
 import 'map_screen.dart';
+import 'track_events_screen.dart';
 
 class TracksScreen extends StatefulWidget {
   const TracksScreen({super.key});
@@ -280,6 +281,21 @@ class _TracksScreenState extends State<TracksScreen> {
                                   },
                                   icon: const Icon(Icons.map, size: 18),
                                   label: const Text('Map'),
+                                ),
+                                ElevatedButton.icon(
+                                  onPressed: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => TrackEventsScreen(
+                                          trackId: trackId,
+                                          trackName: name,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                  icon: const Icon(Icons.list_alt, size: 18),
+                                  label: const Text('GPS Events'),
                                 ),
                                 ElevatedButton.icon(
                                   onPressed: () => _deleteTrack(trackId, name),

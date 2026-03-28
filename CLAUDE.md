@@ -83,6 +83,12 @@ Built with Flutter and SQLite.
   of openstreetmap tile view (see section 4, Mapping).
 - *Table.Row.GpsEvents* - navigates to new page to show table of all the track_events data.
   This is primarily to see accuracy information, but all info should be shown.
+    - At the top of page show a percentage of events -
+       0-5m accuracy, 5m-20m accuracy, 20m+ accuracy.
+    - Has button then enables removal of events. Click on the button and it will confirm -
+      do you really want to remove events like ...
+        - Options - remove events 20m+
+        - Options - remove events 5m+
 
 ---
 
