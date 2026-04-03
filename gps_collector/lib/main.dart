@@ -8,7 +8,9 @@ void main() async {
   // Initialize the database (creates tables if missing)
   final db = DatabaseService();
   await db.database;
-  await db.vacuum();
+
+  // Run VACUUM in background - sqflite serialises operations so no mutex needed
+  db.vacuum();
 
   runApp(const GpsCollectorApp());
 }
