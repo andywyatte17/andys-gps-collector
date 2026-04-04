@@ -186,3 +186,12 @@ Built with Flutter and SQLite.
           speed recorded in the track.
             - Thresholds - accurate / medium / inaccurate is
               0-5m / 5-20m / 20m+.
+
+# 7. Speedometer on past tracks
+
+- You will be able to launch the Speedometer feature on
+  previously recorded tracks. The same green icon as in
+  section 6 will be used. The Speedometer here displays
+  data from a fixed data source, so it is not necessary to
+  display live (polled) updates in the chart (should be
+  more efficient).
