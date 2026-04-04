@@ -9,9 +9,9 @@ void main() async {
   final db = DatabaseService();
   await db.database;
 
-  // Run VACUUM in background - sqflite serialises operations so no mutex needed
-  db.vacuum();
-
+  // Run VACUUM in background only if db is large (>100 MB)
+  db.vacuumIfNeeded(100_000_000);
+  
   runApp(const GpsCollectorApp());
 }
 

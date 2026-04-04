@@ -112,9 +112,16 @@ class DatabaseService {
     }
   }
 
-  /// Run VACUUM to reclaim space after deletions.
-  Future<void> vacuum() async {
+  /// Run VACUUM to reclaim space, only if the db exceeds [thresholdBytes].
+  Future<void> vacuumIfNeeded(int thresholdBytes) async {
     final db = await database;
+    final dbFile = File(db.path);
+    if (await dbFile.exists()) {
+      final sizeBytes = await dbFile.length();
+      if (sizeBytes < thresholdBytes) {
+        return;
+      }
+    }
     await db.execute('VACUUM');
   }
 
