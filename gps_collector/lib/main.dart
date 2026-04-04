@@ -26,6 +26,11 @@ class GpsCollectorApp extends StatelessWidget {
         colorSchemeSeed: Colors.green,
         useMaterial3: true,
       ),
+      darkTheme: ThemeData(
+        colorSchemeSeed: Colors.green,
+        useMaterial3: true,
+        brightness: Brightness.dark,
+      ),
       home: const HomeScreen(),
     );
   }
