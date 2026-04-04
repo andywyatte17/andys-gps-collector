@@ -6,6 +6,15 @@ import '../services/tracking_service.dart';
 
 enum _ChartMode { line, bar }
 
+enum _SpeedUnit {
+  mph('mph'),
+  kph('kph'),
+  minPerKm('min/km');
+
+  final String label;
+  const _SpeedUnit(this.label);
+}
+
 enum _TimeWindow {
   all('All', null),
   last30s('30s', Duration(seconds: 30)),
@@ -29,6 +38,7 @@ class SpeedometerScreen extends StatefulWidget {
 class _SpeedometerScreenState extends State<SpeedometerScreen> {
   _ChartMode _chartMode = _ChartMode.line;
   _TimeWindow _timeWindow = _TimeWindow.all;
+  _SpeedUnit _speedUnit = _SpeedUnit.mph;
 
   // Store the previous callback so we can restore it on dispose.
   void Function(Position)? _previousCallback;
@@ -49,11 +59,33 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
     super.dispose();
   }
 
-  /// Convert m/s to mph.
-  double _mpsToMph(double mps) => mps * 2.23694;
+  /// Convert m/s to the selected display unit.
+  /// For min/km, returns seconds-per-km (displayed as mm:ss).
+  /// Returns null for min/km when speed is effectively zero.
+  double? _convertSpeed(double mps) {
+    switch (_speedUnit) {
+      case _SpeedUnit.mph:
+        return mps * 2.23694;
+      case _SpeedUnit.kph:
+        return mps * 3.6;
+      case _SpeedUnit.minPerKm:
+        if (mps < 0.1) {
+          return null; // stationary — no meaningful pace
+        }
+        return 1000.0 / mps; // seconds per km
+    }
+  }
 
-  /// Round up to a sensible y-axis max for mph/kph.
+  /// Round up to a sensible y-axis max.
+  /// For mph/kph: round up to nearest multiple of 5.
+  /// For min/km (seconds): round up to nearest 10 seconds.
   double _roundUpMax(double value) {
+    if (_speedUnit == _SpeedUnit.minPerKm) {
+      if (value <= 0) {
+        return 600; // 10 minutes
+      }
+      return (value / 10).ceil() * 10.0;
+    }
     if (value <= 0) {
       return 5;
     }
@@ -61,6 +93,28 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
       return 5;
     }
     return (value / 5).ceil() * 5.0;
+  }
+
+  /// Format a display value as a string for the y-axis / header.
+  String _formatValue(double value) {
+    if (_speedUnit == _SpeedUnit.minPerKm) {
+      final totalSecs = value.round();
+      final m = totalSecs ~/ 60;
+      final s = totalSecs % 60;
+      return '$m:${s.toString().padLeft(2, '0')}';
+    }
+    return value.toStringAsFixed(1);
+  }
+
+  /// Format the y-axis max label (integer for mph/kph, mm:ss for min/km).
+  String _formatMaxLabel(double value) {
+    if (_speedUnit == _SpeedUnit.minPerKm) {
+      final totalSecs = value.round();
+      final m = totalSecs ~/ 60;
+      final s = totalSecs % 60;
+      return '$m:${s.toString().padLeft(2, '0')}';
+    }
+    return value.toInt().toString();
   }
 
   /// Filter speed history by the selected time window.
@@ -78,6 +132,22 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
     final latestMs = history.last.msSinceStart;
     final cutoffMs = latestMs - windowMs;
     return history.where((p) => p.msSinceStart >= cutoffMs).toList();
+  }
+
+  /// Pick a round time interval (in seconds) that yields ~4-6 labels
+  /// across the given x-axis range (also in seconds).
+  double _pickTimeInterval(double rangeSeconds) {
+    if (rangeSeconds <= 0) {
+      return 10;
+    }
+    // Candidate intervals: 5s, 10s, 15s, 30s, 1m, 2m, 5m, 10m, 30m
+    const candidates = [5.0, 10.0, 15.0, 30.0, 60.0, 120.0, 300.0, 600.0, 1800.0];
+    for (final c in candidates) {
+      if (rangeSeconds / c <= 6) {
+        return c;
+      }
+    }
+    return 1800.0;
   }
 
   Color _barColorForAccuracy(double accuracyMeters) {
@@ -103,7 +173,21 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
       );
     }
 
-    final speeds = points.map((p) => _mpsToMph(p.speedMps)).toList();
+    final speeds = points
+        .map((p) => _convertSpeed(p.speedMps))
+        .where((v) => v != null)
+        .cast<double>()
+        .toList();
+
+    if (speeds.isEmpty) {
+      return const Center(
+        child: Text(
+          'No speed data to display.',
+          style: TextStyle(color: Colors.grey, fontSize: 16),
+        ),
+      );
+    }
+
     final maxSpeed = speeds.reduce(max);
     final yMax = _roundUpMax(maxSpeed);
 
@@ -122,20 +206,37 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
     int firstMs,
     double yMax,
   ) {
-    final spots = points.map((p) {
+    final spots = points
+        .where((p) => _convertSpeed(p.speedMps) != null)
+        .map((p) {
       return FlSpot(
         (p.msSinceStart - firstMs) / 1000.0,
-        _mpsToMph(p.speedMps),
+        _convertSpeed(p.speedMps)!,
       );
     }).toList();
 
+    if (spots.isEmpty) {
+      return const Center(
+        child: Text(
+          'No speed data to display.',
+          style: TextStyle(color: Colors.grey, fontSize: 16),
+        ),
+      );
+    }
+
+    final xMin = spots.first.x;
     final xMax = spots.last.x;
+    final xRange = xMax - xMin;
+
+    // Choose a label interval that yields roughly 4-6 labels,
+    // snapping to round time boundaries.
+    final xInterval = _pickTimeInterval(xRange);
 
     return LineChart(
       LineChartData(
         minY: 0,
         maxY: yMax,
-        minX: spots.first.x,
+        minX: xMin,
         maxX: xMax,
         clipData: const FlClipData.all(),
         gridData: const FlGridData(show: false),
@@ -147,7 +248,15 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
             sideTitles: SideTitles(
               showTitles: true,
               reservedSize: 30,
+              interval: xInterval,
               getTitlesWidget: (value, meta) {
+                // Suppress labels too close to either edge to avoid overlap.
+                if (value - xMin < xInterval * 0.4 && value != xMin) {
+                  return const SizedBox.shrink();
+                }
+                if (xMax - value < xInterval * 0.4 && value != xMax) {
+                  return const SizedBox.shrink();
+                }
                 final secs = value.toInt();
                 final m = secs ~/ 60;
                 final s = secs % 60;
@@ -164,13 +273,13 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              reservedSize: 40,
+              reservedSize: 48,
               getTitlesWidget: (value, meta) {
                 if (value == 0 || value == yMax) {
                   return SideTitleWidget(
                     axisSide: meta.axisSide,
                     child: Text(
-                      value.toInt().toString(),
+                      _formatMaxLabel(value),
                       style: const TextStyle(color: Colors.grey, fontSize: 11),
                     ),
                   );
@@ -204,8 +313,10 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
     int firstMs,
     double yMax,
   ) {
-    // Filter out points with no speed (speed <= 0).
-    final validPoints = points.where((p) => p.speedMps > 0).toList();
+    // Filter out points with no displayable speed.
+    final validPoints = points
+        .where((p) => _convertSpeed(p.speedMps) != null && p.speedMps > 0)
+        .toList();
 
     if (validPoints.isEmpty) {
       return const Center(
@@ -219,13 +330,13 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
     final barGroups = <BarChartGroupData>[];
     for (var i = 0; i < validPoints.length; i++) {
       final p = validPoints[i];
-      final mph = _mpsToMph(p.speedMps);
+      final displayValue = _convertSpeed(p.speedMps)!;
       barGroups.add(
         BarChartGroupData(
           x: i,
           barRods: [
             BarChartRodData(
-              toY: mph,
+              toY: displayValue,
               color: _barColorForAccuracy(p.accuracyMeters),
               width: max(2.0, 200.0 / validPoints.length).clamp(2.0, 16.0),
               borderRadius: const BorderRadius.vertical(top: Radius.circular(1)),
@@ -254,10 +365,21 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
                 if (idx < 0 || idx >= validPoints.length) {
                   return const SizedBox.shrink();
                 }
-                // Show ~5 labels max.
+                // Target ~5 labels. Compute step and suppress the
+                // last-index label if it's too close to a stepped one.
                 final step = max(1, validPoints.length ~/ 5);
-                if (idx % step != 0 && idx != validPoints.length - 1) {
+                final isStepLabel = idx % step == 0;
+                final isLastLabel = idx == validPoints.length - 1;
+                if (!isStepLabel && !isLastLabel) {
                   return const SizedBox.shrink();
+                }
+                // Suppress last label if it's within half a step of the
+                // nearest stepped label — prevents overlap at the end.
+                if (isLastLabel && !isStepLabel) {
+                  final nearestStep = (idx ~/ step) * step;
+                  if (idx - nearestStep < step * 0.6) {
+                    return const SizedBox.shrink();
+                  }
                 }
                 final secs = (validPoints[idx].msSinceStart - firstMs) ~/ 1000;
                 final m = secs ~/ 60;
@@ -275,13 +397,13 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              reservedSize: 40,
+              reservedSize: 48,
               getTitlesWidget: (value, meta) {
                 if (value == 0 || value == yMax) {
                   return SideTitleWidget(
                     axisSide: meta.axisSide,
                     child: Text(
-                      value.toInt().toString(),
+                      _formatMaxLabel(value),
                       style: const TextStyle(color: Colors.grey, fontSize: 11),
                     ),
                   );
@@ -299,9 +421,14 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
   @override
   Widget build(BuildContext context) {
     final points = _filteredPoints();
-    final speeds = points.map((p) => _mpsToMph(p.speedMps)).toList();
+    final speeds = points
+        .map((p) => _convertSpeed(p.speedMps))
+        .where((v) => v != null)
+        .cast<double>()
+        .toList();
     final maxSpeed = speeds.isEmpty ? 0.0 : speeds.reduce(max);
     final yMax = _roundUpMax(maxSpeed);
+    final unitLabel = _speedUnit.label;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -318,12 +445,12 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
             child: Row(
               children: [
                 Text(
-                  'Max: ${yMax.toInt()} mph',
+                  'Max: ${_formatMaxLabel(yMax)} $unitLabel',
                   style: const TextStyle(color: Colors.white, fontSize: 14),
                 ),
                 const Spacer(),
                 Text(
-                  'Current: ${speeds.isEmpty ? "—" : speeds.last.toStringAsFixed(1)} mph',
+                  'Current: ${speeds.isEmpty ? "—" : _formatValue(speeds.last)} $unitLabel',
                   style: const TextStyle(color: Colors.green, fontSize: 14),
                 ),
               ],
@@ -383,26 +510,37 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
                     Text('Bar'),
                   ],
                 ),
-                const Spacer(),
-                // Time window selector
-                DropdownButton<_TimeWindow>(
-                  value: _timeWindow,
-                  dropdownColor: Colors.grey[900],
-                  style: const TextStyle(color: Colors.white),
-                  underline: Container(height: 1, color: Colors.grey),
-                  items: _TimeWindow.values.map((tw) {
-                    return DropdownMenuItem(
-                      value: tw,
-                      child: Text(tw.label),
-                    );
-                  }).toList(),
-                  onChanged: (value) {
-                    if (value != null) {
-                      setState(() {
-                        _timeWindow = value;
-                      });
-                    }
+                const SizedBox(width: 12),
+                // Speed unit — tap to cycle
+                OutlinedButton(
+                  onPressed: () {
+                    setState(() {
+                      final values = _SpeedUnit.values;
+                      _speedUnit = values[(_speedUnit.index + 1) % values.length];
+                    });
                   },
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    side: const BorderSide(color: Colors.grey),
+                    minimumSize: const Size(64, 36),
+                  ),
+                  child: Text(_speedUnit.label),
+                ),
+                const Spacer(),
+                // Time window — tap to cycle
+                OutlinedButton(
+                  onPressed: () {
+                    setState(() {
+                      final values = _TimeWindow.values;
+                      _timeWindow = values[(_timeWindow.index + 1) % values.length];
+                    });
+                  },
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    side: const BorderSide(color: Colors.grey),
+                    minimumSize: const Size(64, 36),
+                  ),
+                  child: Text(_timeWindow.label),
                 ),
               ],
             ),
