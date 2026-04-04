@@ -10,7 +10,8 @@
       "Bash(~/Library/Android/sdk/emulator/emulator:*)",
       "Bash(~/Library/Android/sdk/platform-tools/adb shell:*)",
       "Bash(~/Library/Android/sdk/platform-tools/adb logcat:*)",
-      "Bash(~/Library/Android/sdk/platform-tools/adb emu:*)"
+      "Bash(~/Library/Android/sdk/platform-tools/adb emu:*)",
+      "Bash(flutter test:*)"
     ]
   }
 }

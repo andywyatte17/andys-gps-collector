@@ -181,7 +181,9 @@ Built with Flutter and SQLite.
       time window - All (default), 30s (last 30 seconds),
       1m (last minute), 5m (last 5 minutes) etc.
     - Styling of graph
-        - Always on a black background.
+        - Use the app's current theme (light/dark mode) for background
+          and text colors. Chart accent colors (green line, bar colors)
+          remain fixed.
         - Green line for line graph.
         - For bar chart - green bars (accurate speed); red bars
           (inaccurate speed measurements); yellow bars
@@ -203,12 +205,14 @@ Built with Flutter and SQLite.
 
 ## 8. Speedometer Enhancements (v2.0)
 
-### Tap-to-inspect
+### Tap-to-inspect (static/history mode only)
 
 - Tapping on the chart (line or bar) highlights the nearest
   data point and displays the measurement at that point as
   a (time / value) label. This label is shown above the chart
   in the chart drawing view.
+- This feature is only available in static (history) mode,
+  not in live mode.
 
 ### Minutes-per-km inverted y-axis
 

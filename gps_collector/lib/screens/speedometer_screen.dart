@@ -27,6 +27,99 @@ enum _TimeWindow {
   const _TimeWindow(this.label, this.duration);
 }
 
+/// Pick a round step for intermediate y-axis labels.
+/// [isMinPerKm] true when the unit is min/km (range is in seconds).
+double pickYStep(double range, {required bool isMinPerKm}) {
+  if (isMinPerKm) {
+    final absRange = range.abs();
+    const candidates = [10.0, 30.0, 60.0, 120.0, 300.0, 600.0];
+    for (final c in candidates) {
+      if (absRange / c <= 8) {
+        return c;
+      }
+    }
+    return 600.0;
+  }
+  const candidates = [1.0, 2.0, 5.0, 10.0, 20.0, 50.0];
+  for (final c in candidates) {
+    if (range / c <= 8) {
+      return c;
+    }
+  }
+  return 50.0;
+}
+
+/// Build the set of y-axis values that should be labelled.
+/// Includes boundary values (yMin, yMax), evenly-spaced intermediates,
+/// and actual min/max of visible data — with overlap removal.
+///
+/// [labelHeight] is the estimated pixel height of a single label.
+/// [chartHeight] is the available pixel height for the chart plot area.
+List<double> buildYLabelValues({
+  required double yMin,
+  required double yMax,
+  required double actualMin,
+  required double actualMax,
+  required double chartHeight,
+  required double labelHeight,
+  required bool isMinPerKm,
+}) {
+  final range = (yMax - yMin).abs();
+  if (range == 0) {
+    return [yMin];
+  }
+
+  final maxLabels = (chartHeight / labelHeight).floor().clamp(2, 20);
+  final minGap = range / maxLabels;
+
+  // Start with boundary values.
+  final values = <double>[yMin, yMax];
+
+  // Add evenly-spaced intermediate points.
+  final step = pickYStep(range, isMinPerKm: isMinPerKm);
+  if (step > 0) {
+    final low = min(yMin, yMax);
+    final high = max(yMin, yMax);
+    var v = (low / step).ceil() * step;
+    while (v < high) {
+      values.add(v);
+      v += step;
+    }
+  }
+
+  // Add actual min/max if they differ enough from all existing labels.
+  for (final v in [actualMin, actualMax]) {
+    if (values.every((existing) => (existing - v).abs() > minGap)) {
+      values.add(v);
+    }
+  }
+
+  // Sort and remove any labels that are too close to the top or bottom
+  // boundaries, or to their neighbour. yMin and yMax always survive.
+  // Boundary labels sit at the very edge (py=0 or py=chartHeight),
+  // so intermediates need extra clearance to avoid overlapping them.
+  final edgeClearance = (labelHeight * 1.5) / chartHeight * range;
+  final boundaryGap = max(minGap, edgeClearance);
+
+  values.sort();
+  final bottom = values.first;
+  final top = values.last;
+  final result = <double>[bottom];
+  for (var i = 1; i < values.length - 1; i++) {
+    final v = values[i];
+    final tooCloseToBottom = (v - bottom).abs() < boundaryGap;
+    final tooCloseToTop = (top - v).abs() < boundaryGap;
+    final tooCloseToPrev = (v - result.last).abs() < minGap;
+    if (!tooCloseToBottom && !tooCloseToTop && !tooCloseToPrev) {
+      result.add(v);
+    }
+  }
+  if (values.length > 1) {
+    result.add(top);
+  }
+  return result;
+}
+
 class SpeedometerScreen extends StatefulWidget {
   /// Live mode: provide a TrackingService for real-time updates.
   final TrackingService? trackingService;
@@ -244,24 +337,49 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
 
   /// Build the set of y-axis values that should be labelled and have
   /// dotted horizontal lines drawn. Includes boundary values and
-  /// actual min/max of visible data (deduplicated).
+  /// Delegate to top-level [pickYStep].
+  double _pickYStep(double range) =>
+      pickYStep(range, isMinPerKm: _speedUnit == _SpeedUnit.minPerKm);
+
+  /// Delegate to top-level [buildYLabelValues].
+  static const _labelFontSize = 11.0;
+  static const _labelHeight = _labelFontSize * 1.2 + 12.0;
+
   List<double> _buildYLabelValues(
     double yMin,
     double yMax,
     double actualMin,
     double actualMax,
+    double chartHeight,
   ) {
-    final values = <double>{yMin, yMax};
-    // Add actual min/max if they differ enough from boundaries.
+    final result = buildYLabelValues(
+      yMin: yMin,
+      yMax: yMax,
+      actualMin: actualMin,
+      actualMax: actualMax,
+      chartHeight: chartHeight,
+      labelHeight: _labelHeight,
+      isMinPerKm: _speedUnit == _SpeedUnit.minPerKm,
+    );
+
+    // Debug: log label positions
     final range = (yMax - yMin).abs();
-    final threshold = range * 0.05; // 5% of range to avoid overlapping labels
-    for (final v in [actualMin, actualMax]) {
-      if (values.every((existing) => (existing - v).abs() > threshold)) {
-        values.add(v);
-      }
+    debugPrint('--- _buildYLabelValues ---');
+    debugPrint('  chartHeight=$chartHeight  labelHeight=${_labelHeight.toStringAsFixed(1)}'
+        '  maxLabels=${(chartHeight / _labelHeight).floor().clamp(2, 20)}'
+        '  minGap=${(range / (chartHeight / _labelHeight).floor().clamp(2, 20)).toStringAsFixed(1)}');
+    debugPrint('  yMin=${yMin.toStringAsFixed(1)}  yMax=${yMax.toStringAsFixed(1)}'
+        '  range=${range.toStringAsFixed(1)}  step=${_pickYStep(range).toStringAsFixed(1)}');
+    for (final v in result) {
+      final fraction = (v - yMin) / range;
+      final py = chartHeight * (1.0 - fraction);
+      final labelText = _formatMaxLabel(v.abs());
+      debugPrint('  label "$labelText"  value=${v.toStringAsFixed(1)}'
+          '  centerY=${py.toStringAsFixed(1)}px');
     }
-    final sorted = values.toList()..sort();
-    return sorted;
+    debugPrint('--- end ---');
+
+    return result;
   }
 
   Color _barColorForAccuracy(double accuracyMeters) {
@@ -346,9 +464,9 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
     final firstMs = points.first.msSinceStart;
     final lastMs = points.last.msSinceStart;
 
-    // Build tap-to-inspect label.
+    // Build tap-to-inspect label (history/static mode only).
     Widget? inspectLabel;
-    if (_selectedPointIndex != null) {
+    if (!widget.isLive && _selectedPointIndex != null) {
       final idx = _selectedPointIndex!;
       if (idx >= 0 && idx < points.length) {
         final p = points[idx];
@@ -356,10 +474,11 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
         if (v != null) {
           final timeStr = _formatInspectTime(p.msSinceStart, firstMs, lastMs);
           final valStr = _formatValue(v);
+          final isDark = Theme.of(context).brightness == Brightness.dark;
           inspectLabel = Text(
             '$timeStr  /  $valStr ${_speedUnit.label}',
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: isDark ? Colors.white : Colors.black,
               fontSize: 13,
               fontWeight: FontWeight.w500,
             ),
@@ -378,13 +497,22 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
               : const SizedBox.shrink(),
         ),
         Expanded(
-          child: _chartMode == _ChartMode.line
-              ? _buildLineChart(points, firstMs, yMin, yMax,
-                  _isInverted ? -maxSpeed : minSpeed,
-                  _isInverted ? -minSpeed : maxSpeed)
-              : _buildBarChart(points, firstMs, yMin, yMax,
-                  _isInverted ? -maxSpeed : minSpeed,
-                  _isInverted ? -minSpeed : maxSpeed),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final chartHeight = constraints.maxHeight;
+              if (_chartMode == _ChartMode.line) {
+                return _buildLineChart(points, firstMs, yMin, yMax,
+                    _isInverted ? -maxSpeed : minSpeed,
+                    _isInverted ? -minSpeed : maxSpeed,
+                    chartHeight);
+              } else {
+                return _buildBarChart(points, firstMs, yMin, yMax,
+                    _isInverted ? -maxSpeed : minSpeed,
+                    _isInverted ? -minSpeed : maxSpeed,
+                    chartHeight);
+              }
+            },
+          ),
         ),
       ],
     );
@@ -397,6 +525,7 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
     double yMax,
     double actualMin,
     double actualMax,
+    double chartHeight,
   ) {
     final lastMs = points.last.msSinceStart;
     final isAllWindow = _timeWindow == _TimeWindow.all;
@@ -438,13 +567,27 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
     final xInterval = _pickTimeInterval(xRange);
 
     // Y-axis labels: boundary values + actual min/max.
-    final yLabelValues = _buildYLabelValues(yMin, yMax, actualMin, actualMax);
+    final yLabelValues = _buildYLabelValues(yMin, yMax, actualMin, actualMax, chartHeight);
+
+    // Pre-build a map from sample index → label widget for the y-axis.
+    final yStep = (yMax - yMin).abs() / 100;
+    final yLabelWidgets = <int, Widget>{};
+    for (final lv in yLabelValues) {
+      final idx = ((lv - yMin) / yStep).round();
+      yLabelWidgets[idx] = SideTitleWidget(
+        axisSide: AxisSide.left,
+        child: Text(
+          _formatMaxLabel(lv.abs()),
+          style: const TextStyle(color: Colors.grey, fontSize: 11),
+        ),
+      );
+    }
 
     // Extra horizontal grid lines for labelled y values.
     final horizontalLines = yLabelValues.map((v) {
       return HorizontalLine(
         y: v,
-        color: Colors.grey.withAlpha(40),
+        color: Colors.grey.withAlpha(90),
         strokeWidth: 1,
         dashArray: [3, 5],
       );
@@ -515,24 +658,31 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
             sideTitles: SideTitles(
               showTitles: true,
               reservedSize: 48,
+              interval: (yMax - yMin).abs() > 0
+                  ? (yMax - yMin).abs() / 100
+                  : 1,
               getTitlesWidget: (value, meta) {
-                if (yLabelValues.any((v) => (v - value).abs() < 0.01)) {
-                  return SideTitleWidget(
-                    axisSide: meta.axisSide,
-                    child: Text(
-                      _formatMaxLabel(value.abs()),
-                      style: const TextStyle(color: Colors.grey, fontSize: 11),
-                    ),
-                  );
+                // fl_chart calls this for interval steps AND for min/max
+                // boundaries. Skip boundary-only calls to avoid duplicates.
+                if (meta.appliedInterval == 0) {
+                  return const SizedBox.shrink();
                 }
-                return const SizedBox.shrink();
+                final yStep = (yMax - yMin).abs() / 100;
+                if (yStep == 0) {
+                  return const SizedBox.shrink();
+                }
+                final idx = ((value - yMin) / yStep).round();
+                return yLabelWidgets[idx] ?? const SizedBox.shrink();
               },
             ),
           ),
         ),
         lineTouchData: LineTouchData(
-          enabled: true,
+          enabled: !widget.isLive,
           touchCallback: (FlTouchEvent event, LineTouchResponse? response) {
+            if (widget.isLive) {
+              return;
+            }
             if (event is FlTapUpEvent || event is FlLongPressEnd || event is FlPanUpdateEvent) {
               final spotIndex = response?.lineBarSpots?.firstOrNull?.spotIndex;
               if (spotIndex != null && spotIndex < spotIndices.length) {
@@ -568,10 +718,9 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
         lineBarsData: [
           LineChartBarData(
             spots: spots,
-            isCurved: true,
-            curveSmoothness: 0.2,
+            isCurved: false,
             color: Colors.green,
-            barWidth: 2.5,
+            barWidth: 2,
             dotData: FlDotData(
               show: selectedSpotIndex >= 0,
               checkToShowDot: (spot, barData) {
@@ -608,6 +757,7 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
     double yMax,
     double actualMin,
     double actualMax,
+    double chartHeight,
   ) {
     final lastMs = points.last.msSinceStart;
     final isAllWindow = _timeWindow == _TimeWindow.all;
@@ -637,19 +787,21 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
       final rawValue = _convertSpeed(p.speedMps)!;
       final plotValue = _isInverted ? -rawValue : rawValue;
       final isSelected = _selectedPointIndex == validIndices[i];
+      final baseColor = _barColorForAccuracy(p.accuracyMeters);
+      final barColor = isSelected
+          ? Color.lerp(baseColor, Colors.white, 0.45)!
+          : baseColor;
+      final barWidth = max(2.0, 200.0 / validPoints.length).clamp(2.0, 16.0);
       barGroups.add(
         BarChartGroupData(
           x: i,
           barRods: [
             BarChartRodData(
-              fromY: _isInverted ? yMin : yMin,
+              fromY: yMin,
               toY: plotValue,
-              color: _barColorForAccuracy(p.accuracyMeters),
-              width: max(2.0, 200.0 / validPoints.length).clamp(2.0, 16.0),
+              color: barColor,
+              width: isSelected ? barWidth + 2 : barWidth,
               borderRadius: const BorderRadius.vertical(top: Radius.circular(1)),
-              borderSide: isSelected
-                  ? const BorderSide(color: Colors.white, width: 1.5)
-                  : BorderSide.none,
             ),
           ],
         ),
@@ -657,31 +809,34 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
     }
 
     // Y-axis labels: boundary values + actual min/max.
-    final yLabelValues = _buildYLabelValues(yMin, yMax, actualMin, actualMax);
+    final yLabelValues = _buildYLabelValues(yMin, yMax, actualMin, actualMax, chartHeight);
+
+    // Pre-build a map from sample index → label widget for the y-axis.
+    final yStep = (yMax - yMin).abs() / 100;
+    final yLabelWidgets = <int, Widget>{};
+    for (final lv in yLabelValues) {
+      final idx = ((lv - yMin) / yStep).round();
+      yLabelWidgets[idx] = SideTitleWidget(
+        axisSide: AxisSide.left,
+        child: Text(
+          _formatMaxLabel(lv.abs()),
+          style: const TextStyle(color: Colors.grey, fontSize: 11),
+        ),
+      );
+    }
 
     return BarChart(
       BarChartData(
-        maxY: yMax,
-        minY: yMin,
-        gridData: FlGridData(
-          show: true,
-          drawVerticalLine: false,
-          drawHorizontalLine: true,
-          checkToShowHorizontalLine: (value) {
-            return yLabelValues.any((v) => (v - value).abs() < 0.01);
-          },
-          getDrawingHorizontalLine: (value) {
-            return FlLine(
-              color: Colors.grey.withAlpha(40),
-              strokeWidth: 1,
-              dashArray: [3, 5],
-            );
-          },
-        ),
-        borderData: FlBorderData(show: false),
+            maxY: yMax,
+            minY: yMin,
+            gridData: const FlGridData(show: false),
+            borderData: FlBorderData(show: false),
         barTouchData: BarTouchData(
-          enabled: true,
+          enabled: !widget.isLive,
           touchCallback: (FlTouchEvent event, BarTouchResponse? response) {
+            if (widget.isLive) {
+              return;
+            }
             if (event is FlTapUpEvent || event is FlLongPressEnd || event is FlPanUpdateEvent) {
               final barIdx = response?.spot?.touchedBarGroupIndex;
               if (barIdx != null && barIdx >= 0 && barIdx < validIndices.length) {
@@ -745,17 +900,21 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
             sideTitles: SideTitles(
               showTitles: true,
               reservedSize: 48,
+              interval: (yMax - yMin).abs() > 0
+                  ? (yMax - yMin).abs() / 100
+                  : 1,
               getTitlesWidget: (value, meta) {
-                if (yLabelValues.any((v) => (v - value).abs() < 0.01)) {
-                  return SideTitleWidget(
-                    axisSide: meta.axisSide,
-                    child: Text(
-                      _formatMaxLabel(value.abs()),
-                      style: const TextStyle(color: Colors.grey, fontSize: 11),
-                    ),
-                  );
+                // fl_chart calls this for interval steps AND for min/max
+                // boundaries. Skip boundary-only calls to avoid duplicates.
+                if (meta.appliedInterval == 0) {
+                  return const SizedBox.shrink();
                 }
-                return const SizedBox.shrink();
+                final yStep = (yMax - yMin).abs() / 100;
+                if (yStep == 0) {
+                  return const SizedBox.shrink();
+                }
+                final idx = ((value - yMin) / yStep).round();
+                return yLabelWidgets[idx] ?? const SizedBox.shrink();
               },
             ),
           ),
@@ -767,13 +926,22 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final scaffoldBg = theme.scaffoldBackgroundColor;
+    final appBarBg = theme.appBarTheme.backgroundColor ?? scaffoldBg;
+    final appBarFg = theme.appBarTheme.foregroundColor ??
+        (isDark ? Colors.white : Colors.black);
+    final textColor = isDark ? Colors.white : Colors.black;
+    final subtleColor = isDark ? Colors.grey : Colors.grey.shade600;
+
     if (_loadingHistory) {
       return Scaffold(
-        backgroundColor: Colors.black,
+        backgroundColor: scaffoldBg,
         appBar: AppBar(
           title: const Text('Speedometer'),
-          backgroundColor: Colors.black,
-          foregroundColor: Colors.white,
+          backgroundColor: appBarBg,
+          foregroundColor: appBarFg,
         ),
         body: const Center(child: CircularProgressIndicator()),
       );
@@ -795,11 +963,11 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
         : widget.trackName ?? 'Speedometer';
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: scaffoldBg,
       appBar: AppBar(
         title: Text(title),
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
+        backgroundColor: appBarBg,
+        foregroundColor: appBarFg,
       ),
       body: Column(
         children: [
@@ -810,13 +978,14 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
               children: [
                 Text(
                   '${_isInverted ? "Best" : "Max"}: ${_formatValue(headerPeak)} $unitLabel',
-                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                  style: TextStyle(color: textColor, fontSize: 14),
                 ),
                 const Spacer(),
-                Text(
-                  'Current: ${speeds.isEmpty ? "—" : _formatValue(speeds.last)} $unitLabel',
-                  style: const TextStyle(color: Colors.green, fontSize: 14),
-                ),
+                if (widget.isLive)
+                  Text(
+                    'Current: ${speeds.isEmpty ? "—" : _formatValue(speeds.last)} $unitLabel',
+                    style: const TextStyle(color: Colors.green, fontSize: 14),
+                  ),
               ],
             ),
           ),
@@ -850,32 +1019,34 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
             child: Row(
               children: [
                 // Chart mode toggle
-                ToggleButtons(
-                  isSelected: [
-                    _chartMode == _ChartMode.line,
-                    _chartMode == _ChartMode.bar,
-                  ],
-                  onPressed: (index) {
-                    setState(() {
-                      _chartMode =
-                          index == 0 ? _ChartMode.line : _ChartMode.bar;
-                      _selectedPointIndex = null;
-                    });
-                  },
-                  borderRadius: BorderRadius.circular(8),
-                  selectedColor: Colors.black,
-                  fillColor: Colors.green,
-                  color: Colors.grey,
-                  constraints: const BoxConstraints(
-                    minHeight: 36,
-                    minWidth: 56,
+                Flexible(
+                  child: ToggleButtons(
+                    isSelected: [
+                      _chartMode == _ChartMode.line,
+                      _chartMode == _ChartMode.bar,
+                    ],
+                    onPressed: (index) {
+                      setState(() {
+                        _chartMode =
+                            index == 0 ? _ChartMode.line : _ChartMode.bar;
+                        _selectedPointIndex = null;
+                      });
+                    },
+                    borderRadius: BorderRadius.circular(8),
+                    selectedColor: isDark ? Colors.black : Colors.white,
+                    fillColor: Colors.green,
+                    color: subtleColor,
+                    constraints: const BoxConstraints(
+                      minHeight: 36,
+                      minWidth: 48,
+                    ),
+                    children: const [
+                      Text('Line'),
+                      Text('Bar'),
+                    ],
                   ),
-                  children: const [
-                    Text('Line'),
-                    Text('Bar'),
-                  ],
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 8),
                 // Speed unit — tap to cycle
                 OutlinedButton(
                   onPressed: () {
@@ -886,9 +1057,10 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
                     });
                   },
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    side: const BorderSide(color: Colors.grey),
-                    minimumSize: const Size(64, 36),
+                    foregroundColor: textColor,
+                    side: BorderSide(color: subtleColor),
+                    minimumSize: const Size(56, 36),
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
                   ),
                   child: Text(_speedUnit.label),
                 ),
@@ -903,9 +1075,10 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
                     });
                   },
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    side: const BorderSide(color: Colors.grey),
-                    minimumSize: const Size(64, 36),
+                    foregroundColor: textColor,
+                    side: BorderSide(color: subtleColor),
+                    minimumSize: const Size(56, 36),
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
                   ),
                   child: Text(_timeWindow.label),
                 ),
@@ -928,8 +1101,9 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
         const SizedBox(width: 4),
-        Text(label, style: const TextStyle(color: Colors.grey, fontSize: 11)),
+        Text(label, style: TextStyle(color: Theme.of(context).brightness == Brightness.dark ? Colors.grey : Colors.grey.shade600, fontSize: 11)),
       ],
     );
   }
 }
+
