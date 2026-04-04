@@ -192,7 +192,16 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
     final windowMs = _timeWindow.duration!.inMilliseconds;
     final latestMs = history.last.msSinceStart;
     final cutoffMs = latestMs - windowMs;
-    return history.where((p) => p.msSinceStart >= cutoffMs).toList();
+    // Include one point just before the window so the chart spans
+    // the full duration even when no point falls exactly on the boundary.
+    int startIndex = 0;
+    for (var i = history.length - 1; i >= 0; i--) {
+      if (history[i].msSinceStart < cutoffMs) {
+        startIndex = i;
+        break;
+      }
+    }
+    return history.sublist(startIndex);
   }
 
   /// Pick a round time interval (in seconds) that yields ~4-6 labels
@@ -267,11 +276,14 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
     int firstMs,
     double yMax,
   ) {
+    // Anchor x-axis to the most recent point (0:00 on the right),
+    // with older points shown as negative time values going left.
+    final lastMs = points.last.msSinceStart;
     final spots = points
         .where((p) => _convertSpeed(p.speedMps) != null)
         .map((p) {
       return FlSpot(
-        (p.msSinceStart - firstMs) / 1000.0,
+        (p.msSinceStart - lastMs) / 1000.0,
         _convertSpeed(p.speedMps)!,
       );
     }).toList();
@@ -286,7 +298,7 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
     }
 
     final xMin = spots.first.x;
-    final xMax = spots.last.x;
+    final xMax = spots.last.x; // should be 0.0
     final xRange = xMax - xMin;
 
     // Choose a label interval that yields roughly 4-6 labels,
@@ -300,7 +312,19 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
         minX: xMin,
         maxX: xMax,
         clipData: const FlClipData.all(),
-        gridData: const FlGridData(show: false),
+        gridData: FlGridData(
+          show: true,
+          drawHorizontalLine: false,
+          drawVerticalLine: true,
+          verticalInterval: xInterval,
+          getDrawingVerticalLine: (value) {
+            return FlLine(
+              color: Colors.grey.withAlpha(60),
+              strokeWidth: 1,
+              dashArray: [4, 4],
+            );
+          },
+        ),
         borderData: FlBorderData(show: false),
         titlesData: FlTitlesData(
           topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
@@ -311,20 +335,27 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
               reservedSize: 30,
               interval: xInterval,
               getTitlesWidget: (value, meta) {
-                // Suppress labels too close to either edge to avoid overlap.
-                if (value - xMin < xInterval * 0.4 && value != xMin) {
-                  return const SizedBox.shrink();
+                // Always show the first and last labels.
+                // Suppress intermediate labels that are too close to either edge.
+                final isFirst = (value - xMin).abs() < 0.01;
+                final isLast = (value - xMax).abs() < 0.01;
+                if (!isFirst && !isLast) {
+                  if (value - xMin < xInterval * 0.4) {
+                    return const SizedBox.shrink();
+                  }
+                  if (xMax - value < xInterval * 0.4) {
+                    return const SizedBox.shrink();
+                  }
                 }
-                if (xMax - value < xInterval * 0.4 && value != xMax) {
-                  return const SizedBox.shrink();
-                }
-                final secs = value.toInt();
-                final m = secs ~/ 60;
-                final s = secs % 60;
+                final absSecs = value.abs().toInt();
+                final m = absSecs ~/ 60;
+                final s = absSecs % 60;
+                final timeStr = '$m:${s.toString().padLeft(2, '0')}';
+                final label = value >= -0.01 ? timeStr : '-$timeStr';
                 return SideTitleWidget(
                   axisSide: meta.axisSide,
                   child: Text(
-                    '$m:${s.toString().padLeft(2, '0')}',
+                    label,
                     style: const TextStyle(color: Colors.grey, fontSize: 10),
                   ),
                 );
