@@ -33,8 +33,11 @@ Built with Flutter and SQLite.
 
 ### Database size handling
 
-- Call sqlite db VACUUM at startup to reclaim space and prevent the
-  db growing too big.
+- Call sqlite db VACUUM at startup **but only** when the db is bigger
+  than a certain threshold (file size) to reclaim space and prevent
+  the db growing too large.
+    - This threshold is 100MB. Note - the VACUUM may not fix the
+      size in some cases - this is accepted.
 - Report sqlite db 'size on disk' stat in Home > Debug area.
 
 ---
@@ -195,3 +198,39 @@ Built with Flutter and SQLite.
   data from a fixed data source, so it is not necessary to
   display live (polled) updates in the chart (should be
   more efficient).
+
+---
+
+## 8. Speedometer Enhancements (v2.0)
+
+### Tap-to-inspect
+
+- Tapping on the chart (line or bar) highlights the nearest
+  data point and displays the measurement at that point as
+  a (time / value) label. This label is shown above the chart
+  in the chart drawing view.
+
+### Minutes-per-km inverted y-axis
+
+- When the speed unit is min/km, the y-axis is reversed so
+  that faster pace (lower number) is at the top and slower
+  pace (higher number) is at the bottom.
+    - Top y value = round(min(values), downwards to nearest 10s)
+    - Bottom y value = round(max(values), upwards to nearest 10s)
+
+### Y-axis improvements
+
+- The left key margin labels additional points to denote the
+  lowest and highest actual value in the visible data range.
+- For all labelled y-axis values, draw a faint dotted horizontal
+  line from the y-axis marked point to the right edge of the
+  chart area.
+
+### X-axis rules (applies to all chart styles)
+
+- When the event window value is "All":
+    - Show times from zero (left) to time-end (right).
+- When the event window value is not "All":
+    - Use 0:00 time on the right and minus times to the left.
+    - Always show a 0:00 time label even if there is no
+      associated track point at that exact time.
