@@ -18,6 +18,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
       time windows (All, 30s, 1m, 5m)
     - Bar chart colour-codes GPS accuracy: green (0-5m),
       yellow (5-20m), red (20m+)
+    - Tap-to-inspect on chart (history mode only) — tap a
+      point on the line or a bar to see its time/value
+      displayed above the chart
+    - Inverted y-axis for min/km — faster pace at top,
+      slower at bottom
+    - Intermediate y-axis labels with dotted horizontal
+      guide lines (line chart mode)
+    - X-axis time direction — "All" window shows 0 on left,
+      non-"All" windows show 0:00 on right with negative
+      times to left
+- Unit tests for y-axis label computation (`pickYStep`,
+  `buildYLabelValues`)
+- Dark theme support (follows system setting)
+
+### Changed
+
+- Speedometer uses app theme (light/dark mode) instead of
+  hardcoded black background
+- VACUUM only runs at startup when db exceeds 100 MB
+
 
 ## [0.1] - 2026-04-03
 
