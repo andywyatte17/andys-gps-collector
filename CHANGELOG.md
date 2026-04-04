@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2] - 2026-04-04
+
+### Added
+
+- Speedometer
+    - Live speed chart during recording and historical
+      playback on past tracks (line or bar chart modes)
+    - Configurable speed units (mph, kph, min/km) and
+      time windows (All, 30s, 1m, 5m)
+    - Bar chart colour-codes GPS accuracy: green (0-5m),
+      yellow (5-20m), red (20m+)
+
 ## [0.1] - 2026-04-03
 
 ### Added
@@ -62,5 +74,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Debug screen: track counts, point counts, DB file
       size, tile cache stats
 
-[unreleased]: https://github.com/andywyatte17/andys-gps-collector/compare/v0.1...HEAD
+[unreleased]: https://github.com/andywyatte17/andys-gps-collector/compare/v0.2...HEAD
+[0.2]: https://github.com/andywyatte17/andys-gps-collector/compare/v0.1...v0.2
 [0.1]: https://github.com/andywyatte17/andys-gps-collector/releases/tag/v0.1

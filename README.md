@@ -146,3 +146,37 @@ flutter run
 # or
 flutter run --release
 ```
+
+## To Build a Release APK
+
+```bash
+cd gps_collector
+flutter build apk --release
+```
+
+The signed APK is output to `build/app/outputs/flutter-apk/app-release.apk`.
+
+To build a split-per-ABI set (smaller per-device APKs):
+
+```bash
+flutter build apk --split-per-abi
+```
+
+This produces separate APKs for `arm64-v8a`, `armeabi-v7a`, and `x86_64`
+under the same output directory.
+
+## To Build an App Bundle (for Google Play)
+
+```bash
+flutter build appbundle --release
+```
+
+The `.aab` is output to `build/app/outputs/bundle/release/app-release.aab`.
+
+## To Install a Release APK Directly
+
+```bash
+flutter install --release
+# or manually:
+adb install build/app/outputs/flutter-apk/app-release.apk
+```

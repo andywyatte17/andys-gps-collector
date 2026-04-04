@@ -6,6 +6,19 @@ import 'database_service.dart';
 
 enum TrackingState { idle, recording, paused }
 
+/// A single speed data point captured during recording.
+class SpeedDataPoint {
+  final int msSinceStart;
+  final double speedMps; // meters per second
+  final double accuracyMeters;
+
+  const SpeedDataPoint({
+    required this.msSinceStart,
+    required this.speedMps,
+    required this.accuracyMeters,
+  });
+}
+
 class TrackingService {
   final DatabaseService _db = DatabaseService();
 
@@ -22,6 +35,9 @@ class TrackingService {
   Position? get lastPosition => _lastPosition;
 
   DateTime? _startTime;
+
+  final List<SpeedDataPoint> _speedHistory = [];
+  List<SpeedDataPoint> get speedHistory => List.unmodifiable(_speedHistory);
 
   StreamSubscription<Position>? _positionSubscription;
 
@@ -42,6 +58,7 @@ class TrackingService {
       startedAt: _startTime!.toIso8601String(),
     );
     _pointCount = 0;
+    _speedHistory.clear();
     _state = TrackingState.recording;
 
     _startListening();
@@ -99,6 +116,7 @@ class TrackingService {
     _startTime = null;
     _pointCount = 0;
     _lastPosition = null;
+    _speedHistory.clear();
   }
 
   void _startListening() {
@@ -117,7 +135,26 @@ class TrackingService {
 
     _positionSubscription = Geolocator.getPositionStream(
       locationSettings: locationSettings,
-    ).listen(_onPosition);
+    ).listen(
+      _onPosition,
+      onError: (error) {
+        developer.log(
+          'Position stream error: $error — will retry in 5s',
+          name: 'tracking_service',
+        );
+        // The stream is dead after an error; cancel and retry.
+        _positionSubscription?.cancel();
+        _positionSubscription = null;
+        if (_state == TrackingState.recording) {
+          Future.delayed(const Duration(seconds: 5), () {
+            if (_state == TrackingState.recording) {
+              developer.log('Retrying position stream', name: 'tracking_service');
+              _startListening();
+            }
+          });
+        }
+      },
+    );
   }
 
   Future<void> _onPosition(Position position) async {
@@ -151,6 +188,15 @@ class TrackingService {
 
     _pointCount++;
     _lastPosition = position;
+
+    if (position.speed >= 0) {
+      _speedHistory.add(SpeedDataPoint(
+        msSinceStart: msSinceStart,
+        speedMps: position.speed,
+        accuracyMeters: position.accuracy,
+      ));
+    }
+
     onPositionUpdate?.call(position);
   }
 

@@ -150,3 +150,48 @@ Built with Flutter and SQLite.
 - Track tiles loaded in our sqlite database (number of bytes loaded)
   along with information about reuse of caching (by bytes) so that I can be sure
   that caching is working. Show this in Debug page from Home page.
+
+---
+
+## 6. Speedometer
+
+- While recording a gps track, a button in the gps events
+  area becomes available with a 'speedometer' icon
+  on it.
+- Tapping the button shows a new Speedometer view.
+- In this view, a constantly updating track shows the
+  speed values being recorded, with older speeds on the
+  left side and newest speed values in the right.
+    - It's a graph with the x-axis time and the
+      y-axis speed.
+    - A key is displayed in a left-hand margin showing 'zero'
+      speed and the highest speed in the window at the top. The
+      key value should always be rounded up to some sensible value
+      like rounded up to a multiple of 5 for kph/mph or rounded up to
+      the nearest 10 seconds for km-rate.
+    - Speed displayed will currently be mph but we may customize to
+      other measures like kph or event minutes per kilometer (well
+      technical that's not a speed but a rate, but you get the idea).
+    - There will be a mode switch to draw a line along the top, and
+      alternatively draw the chart as a speed bar graph.
+    - There will be a button to show the backwards duration of the
+      time window - All (default), 30s (last 30 seconds),
+      1m (last minute), 5m (last 5 minutes) etc.
+    - Styling of graph
+        - Always on a black background.
+        - Green line for line graph.
+        - For bar chart - green bars (accurate speed); red bars
+          (inaccurate speed measurements); yellow bars
+          (medium-accuracy speed). No bar is drawn if there is no
+          speed recorded in the track.
+            - Thresholds - accurate / medium / inaccurate is
+              0-5m / 5-20m / 20m+.
+
+# 7. Speedometer on past tracks
+
+- You will be able to launch the Speedometer feature on
+  previously recorded tracks. The same green icon as in
+  section 6 will be used. The Speedometer here displays
+  data from a fixed data source, so it is not necessary to
+  display live (polled) updates in the chart (should be
+  more efficient).

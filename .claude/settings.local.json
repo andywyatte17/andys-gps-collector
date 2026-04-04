@@ -4,7 +4,13 @@
       "Bash(flutter --version)",
       "Bash(flutter analyze:*)",
       "Read(//Users/andywyatt/.pub-cache/hosted/pub.dev/flutter_map-7.0.2/lib/**)",
-      "Bash(2)"
+      "Bash(2)",
+      "Bash(flutter pub:*)",
+      "Bash(~/Library/Android/sdk/emulator/emulator -help-wipe-data)",
+      "Bash(~/Library/Android/sdk/emulator/emulator:*)",
+      "Bash(~/Library/Android/sdk/platform-tools/adb shell:*)",
+      "Bash(~/Library/Android/sdk/platform-tools/adb logcat:*)",
+      "Bash(~/Library/Android/sdk/platform-tools/adb emu:*)"
     ]
   }
 }
