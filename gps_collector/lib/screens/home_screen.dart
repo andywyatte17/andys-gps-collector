@@ -4,6 +4,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../services/permission_service.dart';
 import '../services/tracking_service.dart';
 import 'debug_screen.dart';
+import 'speedometer_screen.dart';
 import 'tracks_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -427,6 +428,23 @@ class _HomeScreenState extends State<HomeScreen> {
                             style: const TextStyle(fontSize: 16),
                           ),
                           const Spacer(),
+                          IconButton(
+                            icon: const Icon(
+                              Icons.speed,
+                              color: Colors.green,
+                            ),
+                            tooltip: 'Speedometer',
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => SpeedometerScreen(
+                                    trackingService: _trackingService,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
                           IconButton(
                             icon: Icon(
                               Icons.bug_report,

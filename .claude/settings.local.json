@@ -4,7 +4,8 @@
       "Bash(flutter --version)",
       "Bash(flutter analyze:*)",
       "Read(//Users/andywyatt/.pub-cache/hosted/pub.dev/flutter_map-7.0.2/lib/**)",
-      "Bash(2)"
+      "Bash(2)",
+      "Bash(flutter pub:*)"
     ]
   }
 }
