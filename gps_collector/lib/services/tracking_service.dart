@@ -135,7 +135,26 @@ class TrackingService {
 
     _positionSubscription = Geolocator.getPositionStream(
       locationSettings: locationSettings,
-    ).listen(_onPosition);
+    ).listen(
+      _onPosition,
+      onError: (error) {
+        developer.log(
+          'Position stream error: $error — will retry in 5s',
+          name: 'tracking_service',
+        );
+        // The stream is dead after an error; cancel and retry.
+        _positionSubscription?.cancel();
+        _positionSubscription = null;
+        if (_state == TrackingState.recording) {
+          Future.delayed(const Duration(seconds: 5), () {
+            if (_state == TrackingState.recording) {
+              developer.log('Retrying position stream', name: 'tracking_service');
+              _startListening();
+            }
+          });
+        }
+      },
+    );
   }
 
   Future<void> _onPosition(Position position) async {

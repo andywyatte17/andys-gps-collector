@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:geolocator/geolocator.dart';
+import '../services/database_service.dart';
 import '../services/tracking_service.dart';
 
 enum _ChartMode { line, bar }
@@ -27,9 +28,26 @@ enum _TimeWindow {
 }
 
 class SpeedometerScreen extends StatefulWidget {
-  final TrackingService trackingService;
+  /// Live mode: provide a TrackingService for real-time updates.
+  final TrackingService? trackingService;
 
-  const SpeedometerScreen({super.key, required this.trackingService});
+  /// Historical mode: provide a trackId to load past data from the DB.
+  final int? trackId;
+  final String? trackName;
+
+  const SpeedometerScreen.live({
+    super.key,
+    required this.trackingService,
+  })  : trackId = null,
+        trackName = null;
+
+  const SpeedometerScreen.history({
+    super.key,
+    required this.trackId,
+    this.trackName,
+  })  : trackingService = null;
+
+  bool get isLive => trackingService != null;
 
   @override
   State<SpeedometerScreen> createState() => _SpeedometerScreenState();
@@ -40,23 +58,66 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
   _TimeWindow _timeWindow = _TimeWindow.all;
   _SpeedUnit _speedUnit = _SpeedUnit.mph;
 
-  // Store the previous callback so we can restore it on dispose.
+  // Live mode: store the previous callback so we can restore it on dispose.
   void Function(Position)? _previousCallback;
+
+  // Historical mode: loaded data points.
+  List<SpeedDataPoint>? _historicalPoints;
+  bool _loadingHistory = false;
 
   @override
   void initState() {
     super.initState();
-    _previousCallback = widget.trackingService.onPositionUpdate;
-    widget.trackingService.onPositionUpdate = (position) {
-      setState(() {});
-      _previousCallback?.call(position);
-    };
+    if (widget.isLive) {
+      _previousCallback = widget.trackingService!.onPositionUpdate;
+      widget.trackingService!.onPositionUpdate = (position) {
+        setState(() {});
+        _previousCallback?.call(position);
+      };
+    } else {
+      _loadHistoricalData();
+    }
   }
 
   @override
   void dispose() {
-    widget.trackingService.onPositionUpdate = _previousCallback;
+    if (widget.isLive) {
+      widget.trackingService!.onPositionUpdate = _previousCallback;
+    }
     super.dispose();
+  }
+
+  Future<void> _loadHistoricalData() async {
+    setState(() {
+      _loadingHistory = true;
+    });
+    final db = DatabaseService();
+    final events = await db.getTrackPoints(trackId: widget.trackId!);
+    final points = <SpeedDataPoint>[];
+    for (final e in events) {
+      final speed = e['speed'] as double?;
+      final accuracy = e['accuracy_meters'] as double?;
+      final ms = e['ms_since_start'] as int;
+      if (speed != null && speed >= 0) {
+        points.add(SpeedDataPoint(
+          msSinceStart: ms,
+          speedMps: speed,
+          accuracyMeters: accuracy ?? 0,
+        ));
+      }
+    }
+    setState(() {
+      _historicalPoints = points;
+      _loadingHistory = false;
+    });
+  }
+
+  /// Get the current speed data points depending on mode.
+  List<SpeedDataPoint> _allPoints() {
+    if (widget.isLive) {
+      return widget.trackingService!.speedHistory;
+    }
+    return _historicalPoints ?? [];
   }
 
   /// Convert m/s to the selected display unit.
@@ -119,7 +180,7 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
 
   /// Filter speed history by the selected time window.
   List<SpeedDataPoint> _filteredPoints() {
-    final history = widget.trackingService.speedHistory;
+    final history = _allPoints();
     if (history.isEmpty) {
       return [];
     }
@@ -420,6 +481,18 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_loadingHistory) {
+      return Scaffold(
+        backgroundColor: Colors.black,
+        appBar: AppBar(
+          title: const Text('Speedometer'),
+          backgroundColor: Colors.black,
+          foregroundColor: Colors.white,
+        ),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
     final points = _filteredPoints();
     final speeds = points
         .map((p) => _convertSpeed(p.speedMps))
@@ -429,11 +502,14 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
     final maxSpeed = speeds.isEmpty ? 0.0 : speeds.reduce(max);
     final yMax = _roundUpMax(maxSpeed);
     final unitLabel = _speedUnit.label;
+    final title = widget.isLive
+        ? 'Speedometer'
+        : widget.trackName ?? 'Speedometer';
 
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        title: const Text('Speedometer'),
+        title: Text(title),
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
       ),

@@ -6,6 +6,7 @@ import '../services/database_service.dart';
 import '../services/geo_utils.dart';
 import '../services/gpx_service.dart';
 import 'map_screen.dart';
+import 'speedometer_screen.dart';
 import 'track_events_screen.dart';
 
 class TracksScreen extends StatefulWidget {
@@ -281,6 +282,24 @@ class _TracksScreenState extends State<TracksScreen> {
                                   },
                                   icon: const Icon(Icons.map, size: 18),
                                   label: const Text('Map'),
+                                ),
+                                ElevatedButton.icon(
+                                  onPressed: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => SpeedometerScreen.history(
+                                          trackId: trackId,
+                                          trackName: name,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                  icon: const Icon(Icons.speed, size: 18),
+                                  style: ElevatedButton.styleFrom(
+                                    foregroundColor: Colors.green,
+                                  ),
+                                  label: const Text('Speed'),
                                 ),
                                 ElevatedButton.icon(
                                   onPressed: () {
