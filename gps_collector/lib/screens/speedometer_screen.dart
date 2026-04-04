@@ -572,6 +572,8 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
     // Pre-build a map from sample index → label widget for the y-axis.
     final yStep = (yMax - yMin).abs() / 100;
     final yLabelWidgets = <int, Widget>{};
+    // Track which label indices sit exactly on a boundary (yMin or yMax).
+    final yBoundaryIndices = <int>{};
     for (final lv in yLabelValues) {
       final idx = ((lv - yMin) / yStep).round();
       yLabelWidgets[idx] = SideTitleWidget(
@@ -581,6 +583,9 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
           style: const TextStyle(color: Colors.grey, fontSize: 11),
         ),
       );
+      if ((lv - yMin).abs() < 0.01 || (lv - yMax).abs() < 0.01) {
+        yBoundaryIndices.add(idx);
+      }
     }
 
     // Extra horizontal grid lines for labelled y values.
@@ -662,17 +667,24 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
                   ? (yMax - yMin).abs() / 100
                   : 1,
               getTitlesWidget: (value, meta) {
-                // fl_chart calls this for interval steps AND for min/max
-                // boundaries. Skip boundary-only calls to avoid duplicates.
-                if (meta.appliedInterval == 0) {
-                  return const SizedBox.shrink();
-                }
                 final yStep = (yMax - yMin).abs() / 100;
                 if (yStep == 0) {
                   return const SizedBox.shrink();
                 }
                 final idx = ((value - yMin) / yStep).round();
-                return yLabelWidgets[idx] ?? const SizedBox.shrink();
+                final widget = yLabelWidgets[idx];
+                if (widget == null) {
+                  return const SizedBox.shrink();
+                }
+                // For boundary labels (yMin/yMax), prefer the exact
+                // boundary call over the grid step to avoid double-render.
+                if (yBoundaryIndices.contains(idx)) {
+                  final boundaryValue = idx == 0 ? yMin : yMax;
+                  if ((value - boundaryValue).abs() > 0.01) {
+                    return const SizedBox.shrink();
+                  }
+                }
+                return widget;
               },
             ),
           ),
@@ -814,6 +826,7 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
     // Pre-build a map from sample index → label widget for the y-axis.
     final yStep = (yMax - yMin).abs() / 100;
     final yLabelWidgets = <int, Widget>{};
+    final yBoundaryIndices = <int>{};
     for (final lv in yLabelValues) {
       final idx = ((lv - yMin) / yStep).round();
       yLabelWidgets[idx] = SideTitleWidget(
@@ -823,6 +836,9 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
           style: const TextStyle(color: Colors.grey, fontSize: 11),
         ),
       );
+      if ((lv - yMin).abs() < 0.01 || (lv - yMax).abs() < 0.01) {
+        yBoundaryIndices.add(idx);
+      }
     }
 
     return BarChart(
@@ -904,17 +920,24 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
                   ? (yMax - yMin).abs() / 100
                   : 1,
               getTitlesWidget: (value, meta) {
-                // fl_chart calls this for interval steps AND for min/max
-                // boundaries. Skip boundary-only calls to avoid duplicates.
-                if (meta.appliedInterval == 0) {
-                  return const SizedBox.shrink();
-                }
                 final yStep = (yMax - yMin).abs() / 100;
                 if (yStep == 0) {
                   return const SizedBox.shrink();
                 }
                 final idx = ((value - yMin) / yStep).round();
-                return yLabelWidgets[idx] ?? const SizedBox.shrink();
+                final widget = yLabelWidgets[idx];
+                if (widget == null) {
+                  return const SizedBox.shrink();
+                }
+                // For boundary labels (yMin/yMax), prefer the exact
+                // boundary call over the grid step to avoid double-render.
+                if (yBoundaryIndices.contains(idx)) {
+                  final boundaryValue = idx == 0 ? yMin : yMax;
+                  if ((value - boundaryValue).abs() > 0.01) {
+                    return const SizedBox.shrink();
+                  }
+                }
+                return widget;
               },
             ),
           ),
