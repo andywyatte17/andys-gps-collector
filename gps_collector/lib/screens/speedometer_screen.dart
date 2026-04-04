@@ -337,10 +337,6 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
 
   /// Build the set of y-axis values that should be labelled and have
   /// dotted horizontal lines drawn. Includes boundary values and
-  /// Delegate to top-level [pickYStep].
-  double _pickYStep(double range) =>
-      pickYStep(range, isMinPerKm: _speedUnit == _SpeedUnit.minPerKm);
-
   /// Delegate to top-level [buildYLabelValues].
   static const _labelFontSize = 11.0;
   static const _labelHeight = _labelFontSize * 1.2 + 12.0;
@@ -361,23 +357,6 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
       labelHeight: _labelHeight,
       isMinPerKm: _speedUnit == _SpeedUnit.minPerKm,
     );
-
-    // Debug: log label positions
-    final range = (yMax - yMin).abs();
-    debugPrint('--- _buildYLabelValues ---');
-    debugPrint('  chartHeight=$chartHeight  labelHeight=${_labelHeight.toStringAsFixed(1)}'
-        '  maxLabels=${(chartHeight / _labelHeight).floor().clamp(2, 20)}'
-        '  minGap=${(range / (chartHeight / _labelHeight).floor().clamp(2, 20)).toStringAsFixed(1)}');
-    debugPrint('  yMin=${yMin.toStringAsFixed(1)}  yMax=${yMax.toStringAsFixed(1)}'
-        '  range=${range.toStringAsFixed(1)}  step=${_pickYStep(range).toStringAsFixed(1)}');
-    for (final v in result) {
-      final fraction = (v - yMin) / range;
-      final py = chartHeight * (1.0 - fraction);
-      final labelText = _formatMaxLabel(v.abs());
-      debugPrint('  label "$labelText"  value=${v.toStringAsFixed(1)}'
-          '  centerY=${py.toStringAsFixed(1)}px');
-    }
-    debugPrint('--- end ---');
 
     return result;
   }
@@ -566,6 +545,57 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
     final xRange = xMax - xMin;
     final xInterval = _pickTimeInterval(xRange);
 
+    // Pre-compute x-axis labels at interval steps, suppressing labels
+    // too close to edges. Build a map keyed by step index.
+    final xLabelWidgets = <int, Widget>{};
+    final xBoundaryIndices = <int>{};
+    if (xInterval > 0 && xRange > 0) {
+      // Generate label values at xInterval steps from xMin to xMax.
+      final xValues = <double>[];
+      var xv = xMin;
+      while (xv <= xMax + xInterval * 0.01) {
+        xValues.add(xv);
+        xv += xInterval;
+      }
+      // Always include xMin and xMax.
+      if (xValues.isEmpty || (xValues.first - xMin).abs() > 0.01) {
+        xValues.insert(0, xMin);
+      }
+      if ((xValues.last - xMax).abs() > 0.01) {
+        xValues.add(xMax);
+      }
+
+      for (final v in xValues) {
+        // Suppress labels too close to edges (but keep first/last).
+        final isFirst = (v - xMin).abs() < 0.01;
+        final isLast = (v - xMax).abs() < 0.01;
+        if (!isFirst && !isLast) {
+          if (v - xMin < xInterval * 0.4) {
+            continue;
+          }
+          if (xMax - v < xInterval * 0.4) {
+            continue;
+          }
+        }
+        final idx = ((v - xMin) / xInterval).round();
+        final absSecs = v.abs().toInt();
+        final m = absSecs ~/ 60;
+        final s = absSecs % 60;
+        final timeStr = '$m:${s.toString().padLeft(2, '0')}';
+        final label = v >= -0.01 ? timeStr : '-$timeStr';
+        xLabelWidgets[idx] = SideTitleWidget(
+          axisSide: AxisSide.bottom,
+          child: Text(
+            label,
+            style: const TextStyle(color: Colors.grey, fontSize: 10),
+          ),
+        );
+        if (isFirst || isLast) {
+          xBoundaryIndices.add(idx);
+        }
+      }
+    }
+
     // Y-axis labels: boundary values + actual min/max.
     final yLabelValues = _buildYLabelValues(yMin, yMax, actualMin, actualMax, chartHeight);
 
@@ -634,28 +664,21 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
               reservedSize: 30,
               interval: xInterval,
               getTitlesWidget: (value, meta) {
-                final isFirst = (value - xMin).abs() < 0.01;
-                final isLast = (value - xMax).abs() < 0.01;
-                if (!isFirst && !isLast) {
-                  if (value - xMin < xInterval * 0.4) {
-                    return const SizedBox.shrink();
-                  }
-                  if (xMax - value < xInterval * 0.4) {
+                if (xInterval <= 0) {
+                  return const SizedBox.shrink();
+                }
+                final idx = ((value - xMin) / xInterval).round();
+                final widget = xLabelWidgets[idx];
+                if (widget == null) {
+                  return const SizedBox.shrink();
+                }
+                if (xBoundaryIndices.contains(idx)) {
+                  final boundaryValue = idx == 0 ? xMin : xMax;
+                  if ((value - boundaryValue).abs() > 0.01) {
                     return const SizedBox.shrink();
                   }
                 }
-                final absSecs = value.abs().toInt();
-                final m = absSecs ~/ 60;
-                final s = absSecs % 60;
-                final timeStr = '$m:${s.toString().padLeft(2, '0')}';
-                final label = value >= -0.01 ? timeStr : '-$timeStr';
-                return SideTitleWidget(
-                  axisSide: meta.axisSide,
-                  child: Text(
-                    label,
-                    style: const TextStyle(color: Colors.grey, fontSize: 10),
-                  ),
-                );
+                return widget;
               },
             ),
           ),
@@ -820,6 +843,53 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
       );
     }
 
+    // Pre-compute bar chart x-axis labels, deduplicating by label text.
+    final barXLabelWidgets = <int, Widget>{};
+    {
+      final step = max(1, validPoints.length ~/ 5);
+      final shownLabels = <String>{};
+      // Collect candidate indices (step-based + last).
+      final candidates = <int>[];
+      for (var i = 0; i < validPoints.length; i += step) {
+        candidates.add(i);
+      }
+      if (validPoints.isNotEmpty) {
+        final last = validPoints.length - 1;
+        if (!candidates.contains(last)) {
+          // Suppress last if too close to nearest stepped label.
+          final nearestStep = (last ~/ step) * step;
+          if (last - nearestStep >= step * 0.6) {
+            candidates.add(last);
+          }
+        }
+      }
+      for (final idx in candidates) {
+        int secs;
+        if (isAllWindow) {
+          secs = (validPoints[idx].msSinceStart - firstMs) ~/ 1000;
+        } else {
+          secs = (validPoints[idx].msSinceStart - lastMs) ~/ 1000;
+        }
+        final absSecs = secs.abs();
+        final m = absSecs ~/ 60;
+        final s = absSecs % 60;
+        final timeStr = '$m:${s.toString().padLeft(2, '0')}';
+        final label = secs >= 0 ? timeStr : '-$timeStr';
+        // Skip if this label text was already shown.
+        if (shownLabels.contains(label)) {
+          continue;
+        }
+        shownLabels.add(label);
+        barXLabelWidgets[idx] = SideTitleWidget(
+          axisSide: AxisSide.bottom,
+          child: Text(
+            label,
+            style: const TextStyle(color: Colors.grey, fontSize: 10),
+          ),
+        );
+      }
+    }
+
     // Y-axis labels: boundary values + actual min/max.
     final yLabelValues = _buildYLabelValues(yMin, yMax, actualMin, actualMax, chartHeight);
 
@@ -875,40 +945,7 @@ class _SpeedometerScreenState extends State<SpeedometerScreen> {
               showTitles: true,
               reservedSize: 30,
               getTitlesWidget: (value, meta) {
-                final idx = value.toInt();
-                if (idx < 0 || idx >= validPoints.length) {
-                  return const SizedBox.shrink();
-                }
-                final step = max(1, validPoints.length ~/ 5);
-                final isStepLabel = idx % step == 0;
-                final isLastLabel = idx == validPoints.length - 1;
-                if (!isStepLabel && !isLastLabel) {
-                  return const SizedBox.shrink();
-                }
-                if (isLastLabel && !isStepLabel) {
-                  final nearestStep = (idx ~/ step) * step;
-                  if (idx - nearestStep < step * 0.6) {
-                    return const SizedBox.shrink();
-                  }
-                }
-                int secs;
-                if (isAllWindow) {
-                  secs = (validPoints[idx].msSinceStart - firstMs) ~/ 1000;
-                } else {
-                  secs = (validPoints[idx].msSinceStart - lastMs) ~/ 1000;
-                }
-                final absSecs = secs.abs();
-                final m = absSecs ~/ 60;
-                final s = absSecs % 60;
-                final timeStr = '$m:${s.toString().padLeft(2, '0')}';
-                final label = secs >= 0 ? timeStr : '-$timeStr';
-                return SideTitleWidget(
-                  axisSide: meta.axisSide,
-                  child: Text(
-                    label,
-                    style: const TextStyle(color: Colors.grey, fontSize: 10),
-                  ),
-                );
+                return barXLabelWidgets[value.toInt()] ?? const SizedBox.shrink();
               },
             ),
           ),
